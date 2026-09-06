@@ -1,55 +1,48 @@
 # Deployment Status
 
-**Kairu SMP Complete Suite · Manus AI · 6 September 2026**
+**Kairu SMP Complete Suite · 6 September 2026**
 
 ## Current deployment
 
 | Component | State | Location |
 | --- | --- | --- |
-| Community website | Live | `https://kairu-smp-website-production.up.railway.app` |
-| Control-plane API | Live | `https://kairu-control-plane-production.up.railway.app` |
+| Community website | Live, OAuth-ready | <https://kairu-smp-website-production.up.railway.app> |
+| Control-plane API | Live | <https://kairu-control-plane-production.up.railway.app> |
 | PostgreSQL | Live and private | Railway `Postgres` service |
-| Discord bot source | Built and deployed | `control-plane/src/bot/` in the `Kairu-Control-Plane` service |
-| Discord bot process | Waiting for credentials | Starts automatically after Discord variables are configured |
-| Minecraft bridge | Compiled | `release/KairuBridge.jar` and `server-pack/plugins/KairuBridge.jar` |
+| Website OAuth schema/routes | Deployed, fail closed | Migration `004_website_auth.sql`; internal auth routes return `AUTH_NOT_CONFIGURED` until credentials are supplied |
+| Dedicated Discord bot | Built and validated | `discord-bot/`; Railway `Kairu-Discord-Bot` service created but gateway not activated |
+| KairuBridge | Compiled | `release/KairuBridge.jar` and `server-pack/plugins/KairuBridge.jar` |
+| SMPPlatform | Compiled | `release/SMPPlatform.jar` and `server-pack/plugins/SMPPlatform.jar` |
 | Paper/Purpur server pack | Built | `release/Kairu-Server-Pack.zip` |
 
-The website source is synchronized to `https://github.com/rogersk8099-commits/Kairus-Server-Website`. The complete multi-component source is synchronized to `https://github.com/rogersk8099-commits/Kairus-Server-Suite`.
+The website source repository is <https://github.com/rogersk8099-commits/Kairus-Server-Website>. The complete suite repository is <https://github.com/rogersk8099-commits/Kairus-Server-Suite>. Final source synchronization is required after this release package is generated so GitHub remains the Railway source of truth.
 
-The control plane passed its production health check and all public endpoints returned HTTP 200 against PostgreSQL. Database migrations run idempotently before application startup. The Discord bot intentionally remains dormant because no Discord bot token or application ID was supplied. The API remains online without those credentials.
+The website and control plane return HTTP 200 on their public health/content routes. The favicon and login page are live. The login page exposes **Continue with Discord** in a disabled, credential-pending state. This prevents a broken or insecure provider request before an exact Discord application callback and matching service secrets exist.
 
-## Activating the Discord bot
+## Activate website Discord sign-up/sign-in
 
-Create or select a Discord application in the Discord Developer Portal. Add the following variables to the Railway `Kairu-Control-Plane` service:
-
-```text
-DISCORD_BOT_TOKEN=<private bot token>
-DISCORD_APPLICATION_ID=<application ID>
-DISCORD_GUILD_ID=<optional development server ID>
-MEMBERSHIP_ROLE_MAP={"VIP":"role-id","MVP":"role-id"}
-```
-
-Redeploy the service, then run `npm run register-commands` with the same Railway variables. A guild ID registers development commands immediately; global commands may take longer to propagate.[1]
-
-The bot provides `/link`, `/status`, `/players`, `/events`, administrator-only `/sync`, and confirmed `/unlink` commands. It shares the control plane and PostgreSQL database with the website and KairuBridge.
-
-## Connecting the Minecraft server
-
-Install Paper or Purpur 1.21.4 with Java 21. Install the files from `Kairu-Server-Pack.zip`, review and accept the Minecraft EULA yourself, and open TCP 25565 plus UDP 19132. The server pack downloads ViaVersion, Geyser, Floodgate, LuckPerms, and EssentialsX from their official project sources. It includes the compiled KairuBridge plugin.
-
-Copy the private `KairuBridge-PRODUCTION-config.yml` delivered beside the suite ZIP to:
+The user's Discord Developer Portal was not authenticated during deployment, so no application or secret was created. After signing in, create or select one Kairu application and register exactly:
 
 ```text
-plugins/KairuBridge/config.yml
+https://kairu-smp-website-production.up.railway.app/auth/discord/callback
 ```
 
-Restart the server and run `/kairu status`. A successful connection causes `/api/server/status` to report live telemetry and makes the website's dynamic integration ready.
+Configure the variables in `website/docs/DISCORD_OAUTH.md` on both Railway services. Deploy the control plane first, test callback/state/ticket/session/logout behavior in staging, then set `VITE_DISCORD_AUTH_ENABLED=true` on the website and redeploy.
 
-> Paper 1.21.4 is still downloadable but officially unsupported. Stage-test the exact plugin set and plan an upgrade to a supported Paper version.[2]
+## Activate the dedicated Discord bot
+
+The bot compiles, passes 22 tests, and has zero reported npm audit vulnerabilities. Its HTTP health service remains available when `DISCORD_TOKEN` is absent; gateway jobs, registration, role synchronization, schedules, and commands do not start.
+
+Required activation values are `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DATABASE_URL`, `API_URL`, and `API_SECRET`; `DISCORD_TOKEN` activates the gateway. Enable the Discord **Server Members** privileged intent, review least-privilege invite permissions, run `npm run register:commands`, and execute `/setup-server` twice to prove idempotency before production use. Twitch notifications require official EventSub delivery through the control plane. YouTube discovery requires a restricted API key and quota review. TikTok automated LIVE detection remains disabled until approved official capability is available.
+
+## Connect the Minecraft server
+
+Install Paper or Purpur 1.21.4 with Java 21. Install the server-pack files, then review and accept the Minecraft EULA yourself. Open TCP 25565 and UDP 19132 only on the actual game host. Configure KairuBridge with the supplied production control-plane URL and plugin key.
+
+SMPPlatform targets the same Paper/Purpur server. Its single shaded JAR includes ten YAML files, two Flyway migrations, the exact six-world registry, and all module source/classes. Core, registry, identity, outbox, and PostgreSQL-backed guild/points commands are composed in the single runtime. Lifecycle, events/creative, and admin modules remain fail closed until their real backup/world/PlotSquared/staff-policy adapters pass staging; do not enable destructive workflows earlier.
+
+> Paper 1.21.4 remains downloadable but officially unsupported. Pin the full dependency set, prove backups and restoration, and plan an upgrade to a supported release.
 
 ## References
 
-[1]: https://discord.com/developers/docs/interactions/application-commands "Discord application commands"
-[2]: https://fill-ui.papermc.io/projects/paper/version/1.21.4 "Paper 1.21.4 official version listing"
-[3]: https://docs.railway.com/guides/variables "Railway variables documentation"
-[4]: https://geysermc.org/wiki/geyser/setup/ "Geyser setup documentation"
+[Discord OAuth2](https://discord.com/developers/docs/topics/oauth2), [Discord application commands](https://discord.com/developers/docs/interactions/application-commands), [Railway variables](https://docs.railway.com/guides/variables), [Paper downloads](https://fill-ui.papermc.io/projects/paper/version/1.21.4), and [Geyser setup](https://geysermc.org/wiki/geyser/setup/) are the authoritative external references.

@@ -1,0 +1,12 @@
+config-version: 1
+gui:
+  renderer: INVENTORY
+  bedrock-renderer: AUTO_COMPATIBLE_INVENTORY
+  title-prefix: "<gradient:#c000ff:#4cc9ff>Neon Nexus</gradient>"
+  theme: {background: BLACK_STAINED_GLASS_PANE, primary: AMETHYST_SHARD, accent: MAGENTA_DYE, warning: ORANGE_DYE, error: RED_DYE, success: LIME_DYE}
+  custom-model-data: {enabled: false, require-resource-pack: false}
+  navigation: {back-slot: 45, home-slot: 49, close-slot: 53}
+  confirmations: {enabled: true, timeout-seconds: 30, require-typed-confirmation-for: [world-reset, points-set, guild-disband, player-ban]}
+  admin-home: {permission: smpplatform.admin, categories: [players, worlds, guilds, points, hardcore, events, creative, quarry, moderation, announcements, monitor, integrations, settings]}
+  player-selector: {tabs: [ONLINE, RECENT, OFFLINE, BEDROCK, JAVA, STAFF], search-enabled: true, player-heads: true, show: [username, platform, world, guild, rank, playtime, online-status]}
+  world-cards: {exact-world-order: [ashfall, obsidian-gate, atrium, colosseum, quarry, verdance], fields: [status, type, season, players, difficulty, tps, mspt, border, next-reset, guild-status, points-status]}

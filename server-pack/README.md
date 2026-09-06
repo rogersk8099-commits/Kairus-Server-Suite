@@ -2,7 +2,7 @@
 
 **Administrator guide · Manus AI · 6 September 2026**
 
-This pack installs a **Paper or Purpur 1.21.4** Java server with a production-oriented crossplay baseline. It provides official-source download scripts, Java 21 start scripts, security-conscious configuration templates, and the suite-built `KairuBridge.jar` with a secure configuration template. It intentionally contains **no third-party binaries** and **does not accept the Minecraft End User License Agreement (EULA)** on the administrator’s behalf.
+This pack installs a **Paper or Purpur 1.21.4** Java server with a production-oriented crossplay baseline. It provides official-source download scripts, Java 21 start scripts, security-conscious configuration templates, and the suite-built `KairuBridge.jar` and `SMPPlatform.jar`. It intentionally contains **no third-party binaries** and **does not accept the Minecraft End User License Agreement (EULA)** on the administrator’s behalf.
 
 > **Support lifecycle warning.** Paper 1.21.4 build 232 is a stable published build, but Paper marks the 1.21.4 line unsupported as of 17 July 2025. Use this pack only where 1.21.4 is a hard requirement, pin and stage-test the complete plugin stack, and maintain an upgrade plan. [1] [2]
 
@@ -20,10 +20,10 @@ Run an installer from this directory. It places the selected server JAR in the *
 | `templates/Geyser-config.yml` | Geyser crossplay baseline | Yes | Uses UDP 19132 and Floodgate authentication. |
 | `templates/floodgate-config.yml` | Floodgate baseline | Yes | Retains the collision-safe `.` username prefix. |
 | `templates/KairuBridge-config.yml.example` | Kairu control-plane placeholder | Yes | Contains placeholders only; it is not a working credential file. |
-| `plugins/` | Direct plugin JAR location | `KairuBridge.jar` | The installer adds reviewed third-party plugins from official endpoints. |
+| `plugins/` | Direct plugin JAR location | `KairuBridge.jar`, `SMPPlatform.jar` | The installer adds reviewed third-party plugins from official endpoints. |
 | `downloads/` | Local checksum audit files | Empty initially | Contains verified hashes and local inventory hashes after installation. |
 
-This complete-suite release ships the validated private plugin at `plugins/KairuBridge.jar`. Keep it server-side and replace it only through the controlled release process. Do not place server or Bukkit/Paper plugin JARs in `mods/`, nested plugin folders, or `plugins/` subdirectories.
+This complete-suite release ships both validated private plugins directly under `plugins/`. Keep them server-side and replace them only through the controlled release process. Do not place server or Bukkit/Paper plugin JARs in `mods/`, nested plugin folders, or `plugins/` subdirectories.
 
 ## 2. Preconditions and design choices
 
@@ -131,6 +131,7 @@ The following classification is specific to the stated Kairu deployment: Paper/P
 | LuckPerms Bukkit | **Recommended** | Pinned 5.5.81 official Bukkit JAR. | The supported permission/group authority for staff and player permissions. KairuBridge can soft-integrate with it. | Install as the sole permissions manager except during migration. Use Java 21 host runtime. [7] |
 | EssentialsX core | **Recommended** | **Pinned 2.21.0**, not “latest.” | Common operational commands, homes, kits, warps, and basic economy hooks. | 2.21.0 explicitly supports 1.21.4. Newer stated matrices no longer list it; test exact configuration with Bedrock identities. [8] |
 | KairuBridge | **Required** for Kairu suite functions | Privately supplied, tested Kairu build. | Implements Kairu telemetry and the Discord-to-Minecraft linking flow described in the integration contract. | Copy `KairuBridge.jar` to `plugins/`; use server-side placeholders only. It must soft-integrate and make asynchronous network calls. |
+| SMPPlatform | **Required** for Neon Nexus world/guild/points functions | Suite-built `1.0.0` shaded JAR. | Owns the typed six-world registry, PostgreSQL/Flyway platform tables, durable outbox, and guild/points commands; packages staged lifecycle/event/admin modules. | Copy `SMPPlatform.jar` to `plugins/`; configure environment-only database/API secrets; keep destructive modules disabled until backup/world adapters pass staging. |
 | PlaceholderAPI | **Optional** | Pinned 2.12.3, official GitHub SHA-256 verified. | Needed only when another installed plugin/configuration consumes placeholders. | Not a Geyser/Floodgate dependency. Install required expansions separately and minimally. [9] |
 | Vault | **Optional**, test-gated | Pinned 1.7.3 official release asset. | API bridge for compatible economy/chat/permission providers. EssentialsX group prefixes/suffixes need Vault. | Upstream provides no explicit 1.21.4 claim; test provider, prefixes, Floodgate identities, chat, and economy together. [10] |
 | spark profiler | **Optional as a separate JAR** | **No download** by default. | Paper 1.21.4 bundles spark. | Use `/spark`; do not install an override unless a tested reason exists. [11] |
@@ -146,7 +147,7 @@ Paper/Purpur resolves Bukkit/Paper plugin dependencies from each JAR’s descrip
 | 3 | Geyser-Spigot, Floodgate-Spigot | Floodgate is the Geyser auth provider for the crossplay template. | Console shows both enabled; Geyser config points to Floodgate; a Bedrock test account joins. |
 | 4 | LuckPerms, EssentialsX, optional Vault | Establish permission policy and operational commands before applications consume them. | `/lp` works; staff/player groups have least privilege; EssentialsX basic commands work for Java and Bedrock users. |
 | 5 | Optional PlaceholderAPI and only needed expansions | Adds placeholder services only where a consumer needs them. | Consumer renders expected output; no unused expansions are installed. |
-| 6 | KairuBridge | Consumes optional integrations softly and reports to the control plane. | `/kairu status`; heartbeat arrives; `/kairu link` handles test codes; server thread remains responsive. |
+| 6 | KairuBridge, SMPPlatform | Consume optional integrations softly, report to the control plane, and initialize the platform database/world registry. | `/kairu status`; `/worlds`; guild/points smoke tests; migrations succeed; server thread remains responsive. |
 
 ## 5. Crossplay configuration: Geyser + Floodgate
 

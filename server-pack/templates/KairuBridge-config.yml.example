@@ -4,6 +4,7 @@ server-id: "replace-with-a-stable-server-id"
 api-base-url: "https://your-control-plane.example"
 api-key: "CHANGE_ME"
 
+# All HTTP calls run on Java HttpClient's async executor. Values are bounded to protect both services.
 http:
   connect-timeout-seconds: 10
   request-timeout-seconds: 15
@@ -13,11 +14,53 @@ http:
 heartbeat:
   enabled: true
   interval-seconds: 30
+
 snapshots:
   enabled: true
   interval-seconds: 300
+  # Snapshot only players online when the periodic task executes.
+
 commands:
   enabled: true
   poll-interval-seconds: 15
+  # Supported remote command types: WHITELIST_ADD, WHITELIST_REMOVE, NOTIFY.
+
+# Sends a single player snapshot after a successful /kairu link. Does not change the control plane contract.
 link:
   snapshot-after-link: true
+
+# The plugin holds no Discord token and makes no direct Discord API calls. The authenticated control
+# plane owns Discord delivery and the inbound queue. Empty worlds.enabled means all worlds.
+chat-bridge:
+  max-payload-bytes: 8192
+  worlds:
+    enabled: []
+
+  minecraft-to-discord:
+    enabled: true
+    max-characters: 240
+    rate-limit:
+      messages: 20
+      window-seconds: 10
+
+  discord-to-minecraft:
+    enabled: true
+    # The central API queue is polled asynchronously. Bukkit delivery is rescheduled synchronously.
+    poll-limit: 20
+    poll-interval-seconds: 5
+    duplicate-ttl-seconds: 600
+    max-characters: 240
+    # Blank broadcasts to all online players. Set a loaded world name to restrict delivery locally.
+    target-world: ""
+
+  events:
+    join: true
+    leave: true
+    death: true
+    advancement: true
+
+  lifecycle:
+    enabled: true
+    startup-notification: true
+    shutdown-notification: true
+    maintenance-notification: true

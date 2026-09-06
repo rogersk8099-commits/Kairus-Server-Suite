@@ -19,6 +19,7 @@ import { Route as MembershipRouteImport } from './routes/membership'
 import { Route as PlayRouteImport } from './routes/play'
 import { Route as PortalRouteImport } from './routes/portal'
 import { Route as WorldsRouteImport } from './routes/worlds'
+import { Route as AuthDiscordRouteImport } from './routes/auth.discord'
 import { Route as PortalIndexRouteImport } from './routes/portal.index'
 import { Route as PortalAchievementsRouteImport } from './routes/portal.achievements'
 import { Route as PortalDiscordRouteImport } from './routes/portal.discord'
@@ -27,6 +28,7 @@ import { Route as PortalMembershipRouteImport } from './routes/portal.membership
 import { Route as PortalProfileRouteImport } from './routes/portal.profile'
 import { Route as PortalSettingsRouteImport } from './routes/portal.settings'
 import { Route as PortalStatsRouteImport } from './routes/portal.stats'
+import { Route as AuthDiscordCallbackRouteImport } from './routes/auth.discord.callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,6 +80,11 @@ const WorldsRoute = WorldsRouteImport.update({
   path: '/worlds',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthDiscordRoute = AuthDiscordRouteImport.update({
+  id: '/auth/discord',
+  path: '/auth/discord',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalIndexRoute = PortalIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -118,6 +125,11 @@ const PortalStatsRoute = PortalStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => PortalRoute,
 } as any)
+const AuthDiscordCallbackRoute = AuthDiscordCallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
+  getParentRoute: () => AuthDiscordRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -130,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/play': typeof PlayRoute
   '/portal': typeof PortalRouteWithChildren
   '/worlds': typeof WorldsRoute
+  '/auth/discord': typeof AuthDiscordRouteWithChildren
   '/portal/achievements': typeof PortalAchievementsRoute
   '/portal/discord': typeof PortalDiscordRoute
   '/portal/events': typeof PortalEventsRoute
@@ -138,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/portal/settings': typeof PortalSettingsRoute
   '/portal/stats': typeof PortalStatsRoute
   '/portal/': typeof PortalIndexRoute
+  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -149,6 +163,7 @@ export interface FileRoutesByTo {
   '/membership': typeof MembershipRoute
   '/play': typeof PlayRoute
   '/worlds': typeof WorldsRoute
+  '/auth/discord': typeof AuthDiscordRouteWithChildren
   '/portal/achievements': typeof PortalAchievementsRoute
   '/portal/discord': typeof PortalDiscordRoute
   '/portal/events': typeof PortalEventsRoute
@@ -157,6 +172,7 @@ export interface FileRoutesByTo {
   '/portal/settings': typeof PortalSettingsRoute
   '/portal/stats': typeof PortalStatsRoute
   '/portal': typeof PortalIndexRoute
+  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -170,6 +186,7 @@ export interface FileRoutesById {
   '/play': typeof PlayRoute
   '/portal': typeof PortalRouteWithChildren
   '/worlds': typeof WorldsRoute
+  '/auth/discord': typeof AuthDiscordRouteWithChildren
   '/portal/achievements': typeof PortalAchievementsRoute
   '/portal/discord': typeof PortalDiscordRoute
   '/portal/events': typeof PortalEventsRoute
@@ -178,6 +195,7 @@ export interface FileRoutesById {
   '/portal/settings': typeof PortalSettingsRoute
   '/portal/stats': typeof PortalStatsRoute
   '/portal/': typeof PortalIndexRoute
+  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -192,6 +210,7 @@ export interface FileRouteTypes {
     | '/play'
     | '/portal'
     | '/worlds'
+    | '/auth/discord'
     | '/portal/achievements'
     | '/portal/discord'
     | '/portal/events'
@@ -200,6 +219,7 @@ export interface FileRouteTypes {
     | '/portal/settings'
     | '/portal/stats'
     | '/portal/'
+    | '/auth/discord/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -211,6 +231,7 @@ export interface FileRouteTypes {
     | '/membership'
     | '/play'
     | '/worlds'
+    | '/auth/discord'
     | '/portal/achievements'
     | '/portal/discord'
     | '/portal/events'
@@ -219,6 +240,7 @@ export interface FileRouteTypes {
     | '/portal/settings'
     | '/portal/stats'
     | '/portal'
+    | '/auth/discord/callback'
   id:
     | '__root__'
     | '/'
@@ -231,6 +253,7 @@ export interface FileRouteTypes {
     | '/play'
     | '/portal'
     | '/worlds'
+    | '/auth/discord'
     | '/portal/achievements'
     | '/portal/discord'
     | '/portal/events'
@@ -239,6 +262,7 @@ export interface FileRouteTypes {
     | '/portal/settings'
     | '/portal/stats'
     | '/portal/'
+    | '/auth/discord/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -252,6 +276,7 @@ export interface RootRouteChildren {
   PlayRoute: typeof PlayRoute
   PortalRoute: typeof PortalRouteWithChildren
   WorldsRoute: typeof WorldsRoute
+  AuthDiscordRoute: typeof AuthDiscordRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -326,6 +351,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorldsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/discord': {
+      id: '/auth/discord'
+      path: '/auth/discord'
+      fullPath: '/auth/discord'
+      preLoaderRoute: typeof AuthDiscordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portal/': {
       id: '/portal/'
       path: '/'
@@ -382,6 +414,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalStatsRouteImport
       parentRoute: typeof PortalRoute
     }
+    '/auth/discord/callback': {
+      id: '/auth/discord/callback'
+      path: '/callback'
+      fullPath: '/auth/discord/callback'
+      preLoaderRoute: typeof AuthDiscordCallbackRouteImport
+      parentRoute: typeof AuthDiscordRoute
+    }
   }
 }
 
@@ -410,6 +449,18 @@ const PortalRouteChildren: PortalRouteChildren = {
 const PortalRouteWithChildren =
   PortalRoute._addFileChildren(PortalRouteChildren)
 
+interface AuthDiscordRouteChildren {
+  AuthDiscordCallbackRoute: typeof AuthDiscordCallbackRoute
+}
+
+const AuthDiscordRouteChildren: AuthDiscordRouteChildren = {
+  AuthDiscordCallbackRoute: AuthDiscordCallbackRoute,
+}
+
+const AuthDiscordRouteWithChildren = AuthDiscordRoute._addFileChildren(
+  AuthDiscordRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CommunityRoute: CommunityRoute,
@@ -421,6 +472,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlayRoute: PlayRoute,
   PortalRoute: PortalRouteWithChildren,
   WorldsRoute: WorldsRoute,
+  AuthDiscordRoute: AuthDiscordRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

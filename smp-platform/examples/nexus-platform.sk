@@ -1,0 +1,13 @@
+# Requires SMPPlatform's optional Skript adapter. These calls enqueue durable writes; no HTTP runs in this trigger.
+on join:
+    if player is not nexus linked:
+        send "<light_purple>Use <white>/link <light_purple>to connect your Neon Nexus portal account." to player
+    if nexus world type of player is "HARDCORE":
+        send "<dark_purple>Obsidian Gate: one life, shared world." to player
+
+command /nexusbonus:
+    permission: smpplatform.example.bonus
+    trigger:
+        add 50 nexus points to player
+        send nexus notification "You received 50 Nexus Points." to player
+        trigger nexus platform event "SKRIPT_BONUS_GRANTED" with metadata "amount=50" for player

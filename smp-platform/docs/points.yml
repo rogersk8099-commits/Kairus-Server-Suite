@@ -1,0 +1,16 @@
+config-version: 1
+points:
+  enabled: true
+  precision: 0
+  transaction-ledger: {required-for-every-change: true, immutable: true, idempotency-required: true}
+  currencies:
+    NEXUS_POINTS: {display-name: "Nexus Points", account-kinds: [PLAYER], worlds: [ashfall, quarry], allow-negative: false}
+    GUILD_POINTS: {display-name: "Guild Points", account-kinds: [GUILD], worlds: [ashfall, obsidian-gate, atrium, colosseum, quarry], allow-negative: false}
+    HARDCORE_POINTS: {display-name: "Hardcore Points", account-kinds: [PLAYER], worlds: [obsidian-gate], allow-negative: false}
+    BUILD_POINTS: {display-name: "Build Points", account-kinds: [PLAYER], worlds: [atrium], allow-negative: false}
+    EVENT_POINTS: {display-name: "Event Points", account-kinds: [PLAYER, GUILD], worlds: [colosseum], allow-negative: false}
+    SEASON_POINTS: {display-name: "Season Points", account-kinds: [PLAYER, GUILD], worlds: [ashfall, obsidian-gate, atrium, colosseum, quarry], allow-negative: false}
+  sources: [GAMEPLAY, ADMIN, ACHIEVEMENT, EVENT, GUILD, QUEST, SKRIPT, API, SYSTEM, REFUND, ADJUSTMENT]
+  leaderboard: {page-size: 10, refresh-seconds: 60}
+  history: {player-page-size: 20, staff-page-size: 50}
+  staff-actions: {require-reason-for: [set, remove], require-confirmation-for: [set]}

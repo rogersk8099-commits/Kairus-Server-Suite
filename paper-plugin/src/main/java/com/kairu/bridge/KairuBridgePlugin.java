@@ -1,13 +1,18 @@
 package com.kairu.bridge;
 
 import com.kairu.bridge.api.ControlPlaneClient;
+import com.kairu.bridge.chat.BridgeEventType;
+import com.kairu.bridge.chat.ChatBridgeListener;
+import com.kairu.bridge.chat.ChatBridgeService;
 import com.kairu.bridge.command.KairuCommand;
 import com.kairu.bridge.config.BridgeConfig;
+import com.kairu.bridge.config.ChatBridgeConfig;
 import com.kairu.bridge.integration.SoftIntegrations;
 import com.kairu.bridge.payload.Payloads;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -27,6 +32,9 @@ public final class KairuBridgePlugin extends JavaPlugin {
     private ControlPlaneClient client;
     private SoftIntegrations integrations;
     private TelemetryService telemetry;
+    private ChatBridgeConfig chatBridgeConfig;
+    private ChatBridgeService chatBridge;
+    private ChatBridgeListener chatBridgeListener;
 
     @Override public void onEnable() {
         saveDefaultConfig();
@@ -39,6 +47,11 @@ public final class KairuBridgePlugin extends JavaPlugin {
     }
 
     @Override public void onDisable() {
+        if (chatBridge != null) {
+            chatBridge.publishLifecycle(BridgeEventType.SERVER_STOPPING, "Minecraft server bridge stopping", java.util.Map.of());
+            chatBridge.stop();
+        }
+        if (chatBridgeListener != null) HandlerList.unregisterAll(chatBridgeListener);
         stopping = true;
         cancelTasks();
         ControlPlaneClient closing = client;
@@ -52,15 +65,30 @@ public final class KairuBridgePlugin extends JavaPlugin {
         try {
             reloadConfig();
             BridgeConfig candidate = BridgeConfig.from(getConfig());
+            ChatBridgeConfig candidateChatConfig = ChatBridgeConfig.from(getConfig());
             ControlPlaneClient candidateClient = new ControlPlaneClient(candidate, getLogger());
             SoftIntegrations candidateIntegrations = new SoftIntegrations(getLogger());
             TelemetryService candidateTelemetry = new TelemetryService(candidate.serverId(), getDescription().getVersion(), candidateIntegrations);
+            ChatBridgeService candidateChatBridge = new ChatBridgeService(this, candidateClient, candidateChatConfig);
+            ChatBridgeListener candidateChatListener = new ChatBridgeListener(this, candidateChatBridge);
             cancelTasks();
+            if (chatBridge != null) chatBridge.stop();
+            if (chatBridgeListener != null) HandlerList.unregisterAll(chatBridgeListener);
             ControlPlaneClient old = client;
-            bridgeConfig = candidate; client = candidateClient; integrations = candidateIntegrations; telemetry = candidateTelemetry;
+            bridgeConfig = candidate;
+            chatBridgeConfig = candidateChatConfig;
+            client = candidateClient;
+            integrations = candidateIntegrations;
+            telemetry = candidateTelemetry;
+            chatBridge = candidateChatBridge;
+            chatBridgeListener = candidateChatListener;
             if (old != null) old.close();
-            if (candidate.isConfigured()) scheduleTasks();
-            else getLogger().warning("KairuBridge configuration loaded but still contains placeholders; network traffic remains disabled.");
+            if (candidate.isConfigured()) {
+                scheduleTasks();
+                getServer().getPluginManager().registerEvents(chatBridgeListener, this);
+                chatBridge.start();
+                chatBridge.publishLifecycle(BridgeEventType.SERVER_STARTED, "Minecraft server bridge configuration reloaded", java.util.Map.of("reloaded", "true"));
+            } else getLogger().warning("KairuBridge configuration loaded but still contains placeholders; network traffic remains disabled.");
             return true;
         } catch (RuntimeException exception) {
             getLogger().severe("KairuBridge reload rejected: " + exception.getMessage());
@@ -71,11 +99,18 @@ public final class KairuBridgePlugin extends JavaPlugin {
     private boolean installConfiguration() {
         try {
             bridgeConfig = BridgeConfig.from(getConfig());
+            chatBridgeConfig = ChatBridgeConfig.from(getConfig());
             integrations = new SoftIntegrations(getLogger());
             telemetry = new TelemetryService(bridgeConfig.serverId(), getDescription().getVersion(), integrations);
             client = new ControlPlaneClient(bridgeConfig, getLogger());
-            if (bridgeConfig.isConfigured()) scheduleTasks();
-            else getLogger().warning("KairuBridge config uses placeholders; no API requests will be sent until server-id, api-base-url, and api-key are configured.");
+            chatBridge = new ChatBridgeService(this, client, chatBridgeConfig);
+            chatBridgeListener = new ChatBridgeListener(this, chatBridge);
+            if (bridgeConfig.isConfigured()) {
+                scheduleTasks();
+                getServer().getPluginManager().registerEvents(chatBridgeListener, this);
+                chatBridge.start();
+                chatBridge.publishLifecycle(BridgeEventType.SERVER_STARTED, "Minecraft server bridge started", java.util.Map.of("version", getDescription().getVersion()));
+            } else getLogger().warning("KairuBridge config uses placeholders; no API requests will be sent until server-id, api-base-url, and api-key are configured.");
             return true;
         } catch (RuntimeException exception) {
             getLogger().severe("Invalid KairuBridge configuration: " + exception.getMessage());
@@ -109,6 +144,14 @@ public final class KairuBridgePlugin extends JavaPlugin {
         if (!isConfigured()) { sender.sendMessage(ChatColor.RED + "Kairu: bridge configuration is incomplete."); return; }
         sendSnapshot(player, sender);
         sender.sendMessage(ChatColor.GRAY + "Kairu: snapshot queued for " + player.getName() + ".");
+    }
+
+    public void notifyMaintenance(String message, boolean restarting) {
+        ChatBridgeService active = chatBridge;
+        if (stopping || active == null || !isConfigured()) return;
+        Runnable notification = () -> active.notifyMaintenance(message, restarting);
+        if (org.bukkit.Bukkit.isPrimaryThread()) notification.run();
+        else getServer().getScheduler().runTask(this, notification);
     }
 
     private void sendSnapshot(Player player, CommandSender sender) {

@@ -34,7 +34,7 @@ function Dashboard() {
           {user.tier} member since {user.joinedAt}
         </p>
         <h1 className="display-xl mt-2 text-4xl sm:text-5xl">
-          Welcome back, <span className="gradient-text neon-text">{session?.username}</span>
+          Welcome back, <span className="gradient-text neon-text">{session?.user.displayName}</span>
         </h1>
       </header>
 

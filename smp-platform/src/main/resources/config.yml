@@ -1,0 +1,42 @@
+# SMPPlatform example configuration — intended for Paper/Purpur 1.21.4 and Java 21.
+# Resolve all sensitive values from the runtime environment or a secret manager. Never commit real secrets.
+config-version: 1
+server:
+  network-name: "Neon Nexus"
+  minecraft-target: "1.21.4"
+  java-target: 21
+  server-side-only: true
+  locale: "en_GB"
+  timezone: "UTC"
+  maintenance-default: false
+storage:
+  provider: postgresql
+  jdbc-url: "${SMPPLATFORM_DB_JDBC_URL}"
+  username: "${SMPPLATFORM_DB_USERNAME}"
+  password: "${SMPPLATFORM_DB_PASSWORD}"
+  hikari:
+    maximum-pool-size: 12
+    minimum-idle: 2
+    connection-timeout-ms: 5000
+    validation-timeout-ms: 3000
+    max-lifetime-ms: 1500000
+    leak-detection-threshold-ms: 0
+  migrations: {enabled: true, location: "migrations", fail-fast-on-schema-error: true}
+runtime:
+  async: {database-threads: 4, io-threads: 4, event-outbox-batch-size: 100, cache-refresh-seconds: 60}
+  health: {database-degraded-mode: "READ_ONLY_MUTATIONS_BLOCKED", reconnect-initial-seconds: 2, reconnect-max-seconds: 60}
+  audit: {enabled: true, retention-days: 365}
+  account-linking: {code-ttl-minutes: 10, max-codes-per-account-per-hour: 3, code-format: "NX-XXXX-XX", store-code-hash-only: true}
+world-registry:
+  configuration-file: "worlds.yml"
+  local-cache-enabled: true
+  startup-source: "LOCAL_CACHE_THEN_CONFIG"
+  central-sync-enabled: true
+  conflict-policy: "CENTRAL_NEWER_REVISION_WINS_WITH_AUDIT"
+  allow-unknown-world-types: true
+  require-exact-world-id-set: true
+commands:
+  require-confirmation-for: [world-reset, player-inventory-edit, hardcore-status-change, moderation-action, points-set, guild-disband]
+logging:
+  redact-fields: [authorization, token, secret, password, access_token, refresh_token]
+  log-player-ip-addresses: false

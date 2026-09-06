@@ -43,6 +43,58 @@ export type PluginCommand = {
   acknowledgedAt: string | null;
 };
 
+export const bridgeEventTypes = [
+  "CHAT",
+  "PLAYER_JOIN",
+  "PLAYER_LEAVE",
+  "PLAYER_DEATH",
+  "PLAYER_ADVANCEMENT",
+  "SERVER_STARTED",
+  "SERVER_STOPPING",
+  "MAINTENANCE"
+] as const;
+
+export type BridgeEventType = (typeof bridgeEventTypes)[number];
+
+export type BridgeEventRecord = {
+  id: string;
+  serverId: string;
+  eventId: string;
+  eventType: BridgeEventType;
+  occurredAt: string;
+  worldName: string | null;
+  minecraftUuid: string | null;
+  minecraftName: string | null;
+  content: string;
+  details: Record<string, string>;
+  receivedAt: string;
+};
+
+export type NewBridgeEvent = Omit<BridgeEventRecord, "id" | "serverId" | "receivedAt"> & { serverId: string };
+
+export type ChatQueueStatus = "queued" | "delivered" | "rejected";
+
+export type ChatQueueMessage = {
+  id: string;
+  serverId: string;
+  idempotencyKey: string | null;
+  discordMessageId: string | null;
+  discordAuthorId: string | null;
+  displayName: string | null;
+  targetWorld: string | null;
+  content: string;
+  status: ChatQueueStatus;
+  deliveryAttempts: number;
+  lastAttemptAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementDetail: string | null;
+  deadLetteredAt: string | null;
+  createdAt: string;
+};
+
+export type NewChatQueueMessage = Pick<ChatQueueMessage,
+  "serverId" | "idempotencyKey" | "discordMessageId" | "discordAuthorId" | "displayName" | "targetWorld" | "content">;
+
 export type EventRecord = {
   id: string;
   title: string;
@@ -94,6 +146,12 @@ export type AppConfig = {
   discordApplicationId?: string;
   discordGuildId?: string;
   membershipRoleMap: Record<string, string>;
+  websiteApiSecret?: string;
+  sessionSecret?: string;
+  websiteUrl?: string;
+  discordOAuthClientId?: string;
+  discordOAuthClientSecret?: string;
+  discordOAuthRedirectUri?: string;
 };
 
 export type LinkIdentity = {
@@ -126,4 +184,8 @@ export interface ControlPlaneStore {
   listQueuedPluginCommands(serverId: string): Promise<PluginCommand[]>;
   acknowledgePluginCommand(serverId: string, id: string, status: "completed" | "failed", errorMessage?: string): Promise<PluginCommand | null>;
   queuePluginCommand(command: NewPluginCommand): Promise<PluginCommand>;
+  recordBridgeEvent(event: NewBridgeEvent): Promise<{ event: BridgeEventRecord; created: boolean }>;
+  listQueuedChatMessages(serverId: string, limit: number): Promise<ChatQueueMessage[]>;
+  acknowledgeChatMessage(serverId: string, id: string, status: "delivered" | "rejected", detail: string): Promise<ChatQueueMessage | null>;
+  queueChatMessage(message: NewChatQueueMessage): Promise<{ message: ChatQueueMessage; created: boolean }>;
 }

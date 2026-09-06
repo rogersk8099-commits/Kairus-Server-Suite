@@ -1,0 +1,13 @@
+config-version: 1
+hardcore:
+  enabled: true
+  world-id: obsidian-gate
+  season: "Season 7"
+  initial-status: ALIVE
+  allowed-states: [ALIVE, DEAD, SPECTATING, RESET_ELIGIBLE, LOCKED]
+  death: {switch-to-spectator: true, capture: [cause, killer, coordinates, survival-time, statistics], send-central-event: true, notify-discord-via-central-api: true}
+  reset: {enabled: true, day: SUNDAY, time: "22:00", timezone: "Europe/London", duration-minutes: 120, open-status: RESET_ELIGIBLE, close-status: LOCKED}
+  guild-mode: CONFIGURABLE
+  border-size: 8000
+  dangerous-actions-require-confirmation: [revive, eliminate, set-status, reset-player, open-reset-window, close-reset-window]
+  leaderboard: {metric: survival_time_seconds, refresh-seconds: 60}

@@ -1,0 +1,84 @@
+name: SMPPlatform
+version: ${version}
+main: com.neonnexus.smpplatform.SMPPlatform
+api-version: '1.21.4'
+author: Neon Nexus
+description: Unified Neon Nexus world, guild, points, lifecycle, events, creative, administration and integration platform.
+website: https://neonnexus.gg
+softdepend:
+  - Multiverse-Core
+  - Multiverse-Inventories
+  - LuckPerms
+  - PlaceholderAPI
+  - Vault
+  - PlotSquared
+  - Geyser-Spigot
+  - floodgate
+  - Skript
+commands:
+  worlds:
+    description: Lists the exact six registered Neon Nexus worlds.
+    permission: smpplatform.worlds
+  guild:
+    aliases: [g]
+    description: Guild management.
+    permission: smpplatform.guild.use
+  points:
+    description: Point balances, history, leaderboards and audited administration.
+    permission: smpplatform.points.view
+  events:
+    description: Colosseum event RSVP and check-in.
+    permission: smpplatform.events.use
+  build:
+    description: Atrium build submissions.
+    permission: smpplatform.creative.use
+  smpadmin:
+    aliases: [admin]
+    description: Unified administration GUI and command bridge.
+    permission: smpplatform.admin
+  nxlifecycle:
+    description: Confirmation-backed Hardcore and Quarry administration.
+    permission: smpplatform.admin.lifecycle
+permissions:
+  smpplatform.worlds: {default: true}
+  smpplatform.guild.use: {default: true}
+  smpplatform.points.view: {default: true}
+  smpplatform.events.use: {default: true}
+  smpplatform.creative.use: {default: true}
+  smpplatform.admin: {default: op}
+  smpplatform.admin.players: {default: op}
+  smpplatform.admin.worlds: {default: op}
+  smpplatform.admin.monitor: {default: op}
+  smpplatform.admin.audit: {default: op}
+  smpplatform.admin.guilds: {default: op}
+  smpplatform.admin.points: {default: op}
+  smpplatform.admin.events: {default: op}
+  smpplatform.admin.creative: {default: op}
+  smpplatform.admin.lifecycle: {default: op}
+  smpplatform.admin.hardcore: {default: op}
+  smpplatform.admin.quarry: {default: op}
+  smpplatform.creative.worldedit: {default: false}
+  smpplatform.world.ashfall: {default: true}
+  smpplatform.world.obsidian-gate: {default: true}
+  smpplatform.world.atrium: {default: true}
+  smpplatform.world.colosseum: {default: true}
+  smpplatform.world.quarry: {default: true}
+  smpplatform.world.verdance: {default: true}
+  smpplatform.admin.player.teleport: {default: op}
+  smpplatform.admin.player.bring: {default: op}
+  smpplatform.admin.player.world: {default: op}
+  smpplatform.admin.player.spawn: {default: op}
+  smpplatform.admin.player.gamemode: {default: op}
+  smpplatform.admin.player.heal: {default: op}
+  smpplatform.admin.player.feed: {default: op}
+  smpplatform.admin.player.health: {default: op}
+  smpplatform.admin.player.hunger: {default: op}
+  smpplatform.admin.player.xp: {default: op}
+  smpplatform.admin.player.effects: {default: op}
+  smpplatform.admin.player.inventory: {default: op}
+  smpplatform.admin.player.enderchest: {default: op}
+  smpplatform.admin.player.freeze: {default: op}
+  smpplatform.admin.moderation.warn: {default: op}
+  smpplatform.admin.moderation.kick: {default: op}
+  smpplatform.admin.moderation.mute: {default: op}
+  smpplatform.admin.moderation.ban: {default: op}

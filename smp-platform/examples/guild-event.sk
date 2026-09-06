@@ -1,0 +1,9 @@
+# A world-aware community mechanic using safe cache/write-queue integration methods.
+command /guildmeetup:
+    trigger:
+        if nexus guild of player is not set:
+            send "<red>You need a guild to create a guild event." to player
+            stop
+        create nexus guild event "Ashfall Nation Summit" for player
+        add 15 nexus event_points points to player
+        send "<aqua>Your guild event was submitted to the Neon Nexus platform." to player

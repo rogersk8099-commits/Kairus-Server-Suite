@@ -2,7 +2,7 @@
 
 **Kairu SMP Complete Suite · Manus AI · 6 September 2026**
 
-This procedure installs the four suite components without embedding credentials in source or release archives. Paper 1.21.4 requires Java 21. Current Geyser requires Java 21 and directs older backends such as 1.21.4 to use ViaVersion.[1] [2]
+This procedure installs the website, control plane, dedicated Discord bot, KairuBridge, SMPPlatform, and crossplay server pack without embedding credentials in source or release archives. Paper 1.21.4 requires Java 21. Current Geyser requires Java 21 and directs older backends such as 1.21.4 to use ViaVersion.[1] [2]
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ This procedure installs the four suite components without embedding credentials 
 | Node.js | 22 | Control-plane and website build/runtime. |
 | PostgreSQL | Managed service for production | Durable links, telemetry, directory data, and queue records. |
 | Network | TCP 25565, UDP 19132 inbound; HTTPS outbound | Java, Bedrock/Geyser, and control-plane traffic. |
-| Discord application | Bot token and application ID | Slash commands and account-link code creation. |
+| Discord application | OAuth client/secret, bot token, application ID, and target guild ID | Website sign-up/sign-in, slash commands, setup, and account linking. |
 | Public HTTPS | Railway control-plane URL and website URL | Plugin/API transport and browser access. |
 
 ## 1. Unpack and verify
@@ -63,7 +63,7 @@ $env:PAPER_USER_AGENT_CONTACT = 'mailto:mc-admin@example.net'
 .\install-windows.ps1 -ServerFlavor Paper
 ```
 
-The suite-built `plugins/KairuBridge.jar` is already present. The installer adds ViaVersion, Geyser, Floodgate, LuckPerms, and EssentialsX. Read `server-pack/README.md` for optional plugins, official-hash behavior, configuration merge guidance, and the Purpur alternative. Paper plugins belong directly in `plugins/`; the Paper server JAR belongs in the server root.[4]
+The suite-built `plugins/KairuBridge.jar` and `plugins/SMPPlatform.jar` are already present. The installer adds ViaVersion, Geyser, Floodgate, LuckPerms, and EssentialsX. Read `server-pack/README.md` for optional plugins, official-hash behavior, configuration merge guidance, and the Purpur alternative. Paper plugins belong directly in `plugins/`; the Paper server JAR belongs in the server root.[4]
 
 Run once to generate `eula.txt`. An authorized administrator must read the Minecraft EULA and deliberately set `eula=true` only if the organization accepts it. Start again, stop cleanly, and merge the Geyser/Floodgate templates into the version-generated files. Preserve Java `online-mode=true`. Open TCP 25565 and UDP 19132; TCP reachability does not prove UDP reachability.[2] [5]
 
@@ -79,24 +79,38 @@ api-key: "GENERATE_AND_STORE_PRIVATELY"
 
 Restrict config permissions, restart the server, and run `/kairu status`. Confirm a heartbeat appears at `/api/server/status`. Test `/link` in Discord, then `/kairu link <code>` in Minecraft. Codes are random, single-use, and valid for ten minutes.
 
-## 5. Build and deploy the website
+## 5. Configure SMPPlatform
 
-Use `website/.env.example` as a reference. `VITE_*` values are visible to browsers; never place secrets in them.
+SMPPlatform reads database and central-API secrets from environment variables, not YAML. Review `smp-platform/README.md` and every supplied YAML file before starting production. At minimum, configure PostgreSQL and set:
+
+```text
+SMPPLATFORM_DB_PASSWORD=<private database password>
+SMPPLATFORM_CENTRAL_API_TOKEN=<private token when central sync is enabled>
+```
+
+Start in staging. Confirm the exact six worlds, Flyway success, inventory grouping, `/worlds`, `/guild`, and `/points`. Keep lifecycle resets, event/creative automation, and destructive admin actions disabled until their actual backup, Multiverse, PlotSquared, and staff-policy adapters pass the documented staging gate.
+
+## 6. Deploy the dedicated Discord bot
+
+Deploy `discord-bot/` as a service separate from the control plane. The control plane remains the sole database migration owner. Configure only the variables in `discord-bot/ENVIRONMENT_VARIABLES.md`; do not run Prisma migration or schema-push commands from the bot. Without `DISCORD_TOKEN`, the service reports a dormant gateway and starts no Discord jobs.
+
+After supplying a reviewed bot token, application ID, target guild ID, API service credential, and the Server Members privileged intent, run `npm run register:commands`. Install it with least privilege, run `/setup-server` twice, and verify the second run creates no duplicate resources.
+
+## 7. Build and deploy the website
+
+Use `website/docs/DISCORD_OAUTH.md` as the server-side environment contract. `VITE_*` values are visible to browsers; the only OAuth `VITE_` value is the non-secret activation boolean.
 
 ```bash
 cd website
-printf 'VITE_SMP_API_URL=https://your-control-plane.up.railway.app
-VITE_ENABLE_MOCK_FALLBACK=false
-' > .env.production.local
 pnpm install --frozen-lockfile
 pnpm build
 ```
 
 Deploy `.output/` using a Node-compatible host and run `node .output/server/index.mjs`. The service adapter consumes the exact control-plane envelopes. Mock data is automatic when no API URL exists and may be retained for development failures, but production should set `VITE_ENABLE_MOCK_FALLBACK=false`.
 
-Do not configure `VITE_DEV_DISCORD_USER_ID` in a public production build. Portal authentication remains gated until signed Discord OAuth sessions replace the temporary header bridge.
+Register the exact Discord callback `https://<website>/auth/discord/callback`. Configure `WEBSITE_API_SECRET`, `SESSION_SECRET`, Discord client identifiers, the control-plane `DISCORD_OAUTH_CLIENT_SECRET`, and exact website/API origins only in the server secret stores. Deploy the control plane first. After an end-to-end staging sign-in and logout pass, set `VITE_DISCORD_AUTH_ENABLED=true` and redeploy the website.
 
-## 6. Windows source installation helper
+## 8. Windows source installation helper
 
 From the suite root:
 

@@ -13,7 +13,7 @@ softdepend:
 commands:
   kairu:
     description: Kairu control-plane bridge commands
-    usage: /kairu <link|status|reload|sync>
+    usage: /kairu <link|status|reload|sync|maintenance>
     aliases: [kb]
 permissions:
   kairu.link:
@@ -23,5 +23,5 @@ permissions:
     description: Allows a sender to inspect Kairu bridge status.
     default: true
   kairu.admin:
-    description: Allows bridge reloads and manual player synchronization.
+    description: Allows bridge reloads, player synchronization, and maintenance notices.
     default: op

@@ -1,0 +1,27 @@
+# Optional integrations are soft dependencies; their absence must not stop SMPPlatform.
+config-version: 1
+integrations:
+  central-api:
+    enabled: true
+    base-url: "${SMPPLATFORM_API_BASE_URL}"
+    authentication: {mode: "ENVIRONMENT_OR_SECRET_MANAGER", bearer-token: "${SMPPLATFORM_API_TOKEN}"}
+    connect-timeout-ms: 2000
+    request-timeout-ms: 5000
+    retries: {max-attempts: 8, initial-backoff-ms: 1000, max-backoff-ms: 300000, jitter: true}
+    outbox: {enabled: true, batch-size: 100, lease-seconds: 60, idempotency-header: "Idempotency-Key"}
+    sync: {worlds: true, players: true, guilds: true, points: true, events: true, memberships: true}
+  multiverse: {enabled: true, required-for-world-lifecycle: true, soft-dependency: true}
+  multiverse-inventories: {enabled: true, soft-dependency: true, require-hardcore-isolation: true}
+  luckperms: {enabled: true, soft-dependency: true, authority: PERMISSIONS_ONLY}
+  placeholderapi: {enabled: true, soft-dependency: true, expansion-identifier: nexus}
+  floodgate: {enabled: true, soft-dependency: true, identity-source: FLOODGATE_API}
+  geyser: {enabled: true, soft-dependency: true, forms-adapter: OPTIONAL}
+  plotsquared: {enabled: true, soft-dependency: true, world-id: atrium}
+  skript: {enabled: true, soft-dependency: true, addon-id: SMPPlatformSkript}
+  claims: {enabled: false, soft-dependency: true, adapter: null}
+  economy: {enabled: false, soft-dependency: true, adapter: null}
+  discord:
+    enabled: true
+    mode: "CENTRAL_API_EVENT_BUS_ONLY"
+    bot-token-in-plugin: false
+    world-chat-bridges: {ashfall: true, obsidian-gate: true, atrium: true, colosseum: true, quarry: true, verdance: false}

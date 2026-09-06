@@ -1,5 +1,6 @@
 import type { Client } from "discord.js";
 import { buildApp } from "./app.js";
+import { createAuthStore } from "./auth/index.js";
 import { startDiscordBot } from "./bot/discord-bot.js";
 import { loadConfig } from "./config.js";
 import { createStore } from "./db/index.js";
@@ -7,7 +8,8 @@ import { createStore } from "./db/index.js";
 async function main() {
   const config = loadConfig();
   const store = createStore(config);
-  const app = buildApp(config, store);
+  const authStore = createAuthStore(config);
+  const app = buildApp(config, store, authStore);
   let bot: Client | undefined;
   let shuttingDown = false;
 
@@ -20,7 +22,7 @@ async function main() {
     try {
       bot?.destroy();
       await app.close();
-      await store.close();
+      await Promise.all([store.close(), authStore.close()]);
       app.log.info("graceful shutdown complete");
       process.exitCode = 0;
     } catch (error) {
@@ -32,7 +34,7 @@ async function main() {
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
   await app.listen({ host: config.host, port: config.port });
-  app.log.info({ storage: store.kind, port: config.port }, "Kairu control-plane API listening");
+  app.log.info({ storage: store.kind, authStorage: authStore.kind, port: config.port }, "Kairu control-plane API listening");
   if (config.discordBotToken) {
     bot = await startDiscordBot(config, store);
     app.log.info("Discord bot startup requested");

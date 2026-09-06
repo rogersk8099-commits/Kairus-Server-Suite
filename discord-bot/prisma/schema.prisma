@@ -1,0 +1,424 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// This is a mapping only. The control-plane SQL migrations are the sole DDL authority.
+model SchemaMigration {
+  id        String   @id @map("id")
+  appliedAt DateTime @default(now()) @map("applied_at") @db.Timestamptz(6)
+
+  @@map("schema_migrations")
+}
+
+model ServerHeartbeat {
+  serverId      String   @id @map("server_id")
+  online        Boolean  @map("online")
+  tps           Float    @map("tps")
+  playerCount   Int      @map("player_count")
+  worlds        Json     @default("[]") @map("worlds")
+  players       Json     @default("[]") @map("players")
+  version       String   @map("version")
+  uptimeSeconds BigInt   @map("uptime_seconds")
+  receivedAt    DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@map("server_heartbeats")
+}
+
+model PlayerSnapshot {
+  minecraftUuid   String   @id @map("minecraft_uuid") @db.Uuid
+  name            String   @map("name")
+  playtimeSeconds BigInt   @default(0) @map("playtime_seconds")
+  blocksBroken    BigInt   @default(0) @map("blocks_broken")
+  kills           BigInt   @default(0) @map("kills")
+  deaths          BigInt   @default(0) @map("deaths")
+  distanceMeters  Float    @default(0) @map("distance_meters")
+  balance         Float    @default(0) @map("balance")
+  rankName        String   @default("Member") @map("rank_name")
+  worldName       String?  @map("world_name")
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([name], map: "player_snapshots_name_idx")
+  @@map("player_snapshots")
+}
+
+model LinkCode {
+  codeHash      String    @id @map("code_hash")
+  discordUserId String    @map("discord_user_id")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt    DateTime? @map("consumed_at") @db.Timestamptz(6)
+
+  @@index([expiresAt], map: "link_codes_expires_at_idx")
+  @@map("link_codes")
+}
+
+model PlayerLink {
+  discordUserId String   @id @map("discord_user_id")
+  minecraftUuid String   @unique @map("minecraft_uuid") @db.Uuid
+  javaUsername  String   @map("java_username")
+  bedrockXuid   String?  @unique @map("bedrock_xuid")
+  linkedAt      DateTime @default(now()) @map("linked_at") @db.Timestamptz(6)
+
+  @@map("player_links")
+}
+
+model PluginCommand {
+  id             String    @id @map("id")
+  serverId       String    @map("server_id")
+  commandType    String    @map("command_type")
+  payload        Json      @default("{}") @map("payload")
+  status         String    @default("queued") @map("status")
+  errorMessage   String?   @map("error_message")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  acknowledgedAt DateTime? @map("acknowledged_at") @db.Timestamptz(6)
+
+  @@index([serverId, status, createdAt], map: "plugin_commands_pending_idx")
+  @@map("plugin_commands")
+}
+
+model LegacyEvent {
+  id          String    @id @map("id")
+  title       String    @map("title")
+  description String    @default("") @map("description")
+  startsAt    DateTime  @map("starts_at") @db.Timestamptz(6)
+  endsAt      DateTime? @map("ends_at") @db.Timestamptz(6)
+  location    String?   @map("location")
+  status      String    @default("scheduled") @map("status")
+
+  @@index([startsAt], map: "events_starts_at_idx")
+  @@map("events")
+}
+
+model LegacyStream {
+  id          String    @id @map("id")
+  channelName String    @map("channel_name")
+  url         String    @map("url")
+  platform    String    @map("platform")
+  title       String    @map("title")
+  viewerCount Int       @default(0) @map("viewer_count")
+  live        Boolean   @default(true) @map("live")
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
+
+  @@map("streams")
+}
+
+model MembershipTier {
+  slug              String @id @map("slug")
+  name              String @map("name")
+  description       String @map("description")
+  priceMonthlyCents Int    @map("price_monthly_cents")
+  benefits          Json   @default("[]") @map("benefits")
+
+  @@map("membership_tiers")
+}
+
+model DiscordGuild {
+  guildId               String                    @id @map("guild_id") @db.VarChar(32)
+  name                  String?                   @map("name") @db.VarChar(100)
+  timezone              String                    @default("UTC") @map("timezone") @db.VarChar(64)
+  locale                String                    @default("en-US") @map("locale") @db.VarChar(16)
+  profileVisibility     String                    @default("members") @map("profile_visibility") @db.VarChar(16)
+  announcementChannelId String?                   @map("announcement_channel_id") @db.VarChar(32)
+  maintenanceMessage    String?                   @map("maintenance_message") @db.Text
+  maintenanceEnabled    Boolean                   @default(false) @map("maintenance_enabled")
+  createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  resources             DiscordSetupResource[]
+  memberships           DiscordMembership[]
+  events                DiscordEvent[]
+  streamers             DiscordStreamer[]
+  polls                 DiscordPoll[]
+  suggestions           DiscordSuggestion[]
+  tickets               DiscordTicket[]
+  reports               DiscordReport[]
+  moderationActions     DiscordModerationAction[]
+  notifications         DiscordNotification[]
+  webhookReceipts       DiscordWebhookReceipt[]
+
+  @@map("discord_guilds")
+}
+
+model DiscordSetupResource {
+  id           String       @id @default(cuid()) @map("id")
+  guildId      String       @map("guild_id") @db.VarChar(32)
+  resourceKey  String       @map("resource_key") @db.VarChar(100)
+  resourceType String       @map("resource_type") @db.VarChar(32)
+  discordId    String       @map("discord_id") @db.VarChar(32)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild        DiscordGuild @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, resourceKey], map: "discord_setup_resources_guild_id_resource_key_key")
+  @@index([guildId, resourceType], map: "discord_setup_resources_guild_type_idx")
+  @@map("discord_setup_resources")
+}
+
+model DiscordMembership {
+  id               String       @id @default(cuid()) @map("id")
+  guildId          String       @map("guild_id") @db.VarChar(32)
+  discordUserId    String       @map("discord_user_id") @db.VarChar(32)
+  membershipTierId String?      @map("membership_tier_id")
+  status           String       @default("PENDING") @map("status") @db.VarChar(32)
+  externalRef      String?      @map("external_ref")
+  metadata         Json         @default("{}") @map("metadata")
+  startedAt        DateTime?    @map("started_at") @db.Timestamptz(6)
+  expiresAt        DateTime?    @map("expires_at") @db.Timestamptz(6)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild            DiscordGuild @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, discordUserId], map: "discord_memberships_guild_user_key")
+  @@index([guildId, status], map: "discord_memberships_guild_status_idx")
+  @@map("discord_memberships")
+}
+
+model DiscordEvent {
+  id                    String                 @id @default(cuid()) @map("id")
+  guildId               String                 @map("guild_id") @db.VarChar(32)
+  title                 String                 @map("title") @db.VarChar(200)
+  description           String                 @map("description") @db.Text
+  startsAt              DateTime               @map("starts_at") @db.Timestamptz(6)
+  status                String                 @default("DRAFT") @map("status") @db.VarChar(32)
+  createdBy             String                 @map("created_by") @db.VarChar(32)
+  announcementChannelId String?                @map("announcement_channel_id") @db.VarChar(32)
+  announcementMessageId String?                @map("announcement_message_id") @db.VarChar(32)
+  cancellationReason    String?                @map("cancellation_reason") @db.Text
+  startedAt             DateTime?              @map("started_at") @db.Timestamptz(6)
+  cancelledAt           DateTime?              @map("cancelled_at") @db.Timestamptz(6)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild                 DiscordGuild           @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+  rsvps                 DiscordEventRsvp[]
+  reminders             DiscordEventReminder[]
+
+  @@index([guildId, status, startsAt], map: "discord_events_guild_status_start_idx")
+  @@map("discord_events")
+}
+
+model DiscordEventRsvp {
+  id            String       @id @default(cuid()) @map("id")
+  eventId       String       @map("event_id")
+  discordUserId String       @map("discord_user_id") @db.VarChar(32)
+  status        String       @map("status") @db.VarChar(16)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event         DiscordEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, discordUserId], map: "discord_event_rsvps_event_user_key")
+  @@map("discord_event_rsvps")
+}
+
+model DiscordEventReminder {
+  id          String       @id @default(cuid()) @map("id")
+  eventId     String       @map("event_id")
+  kind        String       @map("kind") @db.VarChar(16)
+  dueAt       DateTime     @map("due_at") @db.Timestamptz(6)
+  dedupeKey   String       @unique @map("dedupe_key") @db.VarChar(255)
+  deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(6)
+  event       DiscordEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([dueAt, deliveredAt], map: "discord_event_reminders_due_idx")
+  @@map("discord_event_reminders")
+}
+
+model DiscordStreamer {
+  id                 String       @id @default(cuid()) @map("id")
+  guildId            String       @map("guild_id") @db.VarChar(32)
+  discordUserId      String       @map("discord_user_id") @db.VarChar(32)
+  platform           String       @map("platform") @db.VarChar(16)
+  channelUrl         String       @map("channel_url") @db.Text
+  channelExternalId  String?      @map("channel_external_id") @db.VarChar(255)
+  contentDescription String       @map("content_description") @db.Text
+  status             String       @default("PENDING") @map("status") @db.VarChar(32)
+  reviewedBy         String?      @map("reviewed_by") @db.VarChar(32)
+  reviewReason       String?      @map("review_reason") @db.Text
+  lastLiveStreamId   String?      @map("last_live_stream_id") @db.VarChar(255)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild              DiscordGuild @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@index([guildId, status], map: "discord_streamers_guild_status_idx")
+  @@map("discord_streamers")
+}
+
+model DiscordPoll {
+  id        String            @id @default(cuid()) @map("id")
+  guildId   String            @map("guild_id") @db.VarChar(32)
+  question  String            @map("question") @db.Text
+  options   Json              @map("options")
+  status    String            @default("OPEN") @map("status") @db.VarChar(16)
+  createdBy String            @map("created_by") @db.VarChar(32)
+  closesAt  DateTime?         @map("closes_at") @db.Timestamptz(6)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild     DiscordGuild      @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+  votes     DiscordPollVote[]
+
+  @@index([guildId, status, closesAt], map: "discord_polls_guild_status_close_idx")
+  @@map("discord_polls")
+}
+
+model DiscordPollVote {
+  id              String      @id @default(cuid()) @map("id")
+  pollId          String      @map("poll_id")
+  linkedAccountId String      @map("linked_account_id")
+  discordUserId   String      @map("discord_user_id") @db.VarChar(32)
+  optionIndex     Int         @map("option_index")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  poll            DiscordPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, linkedAccountId], map: "discord_poll_votes_poll_account_key")
+  @@index([pollId, optionIndex], map: "discord_poll_votes_poll_option_idx")
+  @@map("discord_poll_votes")
+}
+
+model DiscordSuggestion {
+  id              String                  @id @default(cuid()) @map("id")
+  guildId         String                  @map("guild_id") @db.VarChar(32)
+  authorDiscordId String                  @map("author_discord_id") @db.VarChar(32)
+  title           String                  @map("title") @db.VarChar(200)
+  body            String                  @map("body") @db.Text
+  state           String                  @default("OPEN") @map("state") @db.VarChar(32)
+  staffNote       String?                 @map("staff_note") @db.Text
+  channelId       String?                 @map("channel_id") @db.VarChar(32)
+  messageId       String?                 @map("message_id") @db.VarChar(32)
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild           DiscordGuild            @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+  votes           DiscordSuggestionVote[]
+
+  @@index([guildId, state, createdAt], map: "discord_suggestions_guild_state_idx")
+  @@map("discord_suggestions")
+}
+
+model DiscordSuggestionVote {
+  id            String            @id @default(cuid()) @map("id")
+  suggestionId  String            @map("suggestion_id")
+  discordUserId String            @map("discord_user_id") @db.VarChar(32)
+  value         Int               @map("value")
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  suggestion    DiscordSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+
+  @@unique([suggestionId, discordUserId], map: "discord_suggestion_votes_suggestion_user_key")
+  @@map("discord_suggestion_votes")
+}
+
+model DiscordTicket {
+  id                 String              @id @default(cuid()) @map("id")
+  guildId            String              @map("guild_id") @db.VarChar(32)
+  requesterDiscordId String              @map("requester_discord_id") @db.VarChar(32)
+  category           String              @map("category") @db.VarChar(32)
+  subject            String              @map("subject") @db.VarChar(200)
+  description        String              @map("description") @db.Text
+  channelId          String              @map("channel_id") @db.VarChar(32)
+  state              String              @default("OPEN") @map("state") @db.VarChar(16)
+  assignedTo         String?             @map("assigned_to") @db.VarChar(32)
+  closedBy           String?             @map("closed_by") @db.VarChar(32)
+  closedAt           DateTime?           @map("closed_at") @db.Timestamptz(6)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild              DiscordGuild        @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+  notes              DiscordTicketNote[]
+
+  @@unique([guildId, channelId], map: "discord_tickets_guild_channel_key")
+  @@index([guildId, requesterDiscordId, state], map: "discord_tickets_guild_requester_state_idx")
+  @@map("discord_tickets")
+}
+
+model DiscordTicketNote {
+  id              String        @id @default(cuid()) @map("id")
+  ticketId        String        @map("ticket_id")
+  authorDiscordId String        @map("author_discord_id") @db.VarChar(32)
+  body            String        @map("body") @db.Text
+  internal        Boolean       @default(true) @map("internal")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  ticket          DiscordTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt], map: "discord_ticket_notes_ticket_created_idx")
+  @@map("discord_ticket_notes")
+}
+
+model DiscordReport {
+  id                String       @id @default(cuid()) @map("id")
+  guildId           String       @map("guild_id") @db.VarChar(32)
+  reporterDiscordId String       @map("reporter_discord_id") @db.VarChar(32)
+  accusedPlayer     String       @map("accused_player") @db.VarChar(100)
+  reason            String       @map("reason") @db.Text
+  evidenceUrls      Json         @default("[]") @map("evidence_urls")
+  status            String       @default("OPEN") @map("status") @db.VarChar(32)
+  reviewedBy        String?      @map("reviewed_by") @db.VarChar(32)
+  resolution        String?      @map("resolution") @db.Text
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild             DiscordGuild @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@index([guildId, status, createdAt], map: "discord_reports_guild_status_idx")
+  @@map("discord_reports")
+}
+
+model DiscordModerationAction {
+  id                 String       @id @default(cuid()) @map("id")
+  guildId            String       @map("guild_id") @db.VarChar(32)
+  targetDiscordId    String       @map("target_discord_id") @db.VarChar(32)
+  moderatorDiscordId String       @map("moderator_discord_id") @db.VarChar(32)
+  action             String       @map("action") @db.VarChar(16)
+  reason             String       @map("reason") @db.Text
+  durationSeconds    Int?         @map("duration_seconds")
+  platformCaseId     String?      @map("platform_case_id") @db.VarChar(255)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  guild              DiscordGuild @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@index([guildId, targetDiscordId, createdAt], map: "discord_moderation_target_idx")
+  @@map("discord_moderation_actions")
+}
+
+model DiscordNotification {
+  id                 String       @id @default(cuid()) @map("id")
+  guildId            String       @map("guild_id") @db.VarChar(32)
+  target             String       @map("target") @db.VarChar(16)
+  recipientDiscordId String?      @map("recipient_discord_id") @db.VarChar(32)
+  subject            String       @map("subject") @db.VarChar(200)
+  body               String       @map("body") @db.Text
+  dedupeKey          String       @unique @map("dedupe_key") @db.VarChar(255)
+  metadata           Json         @default("{}") @map("metadata")
+  status             String       @default("PENDING") @map("status") @db.VarChar(16)
+  scheduledFor       DateTime?    @map("scheduled_for") @db.Timestamptz(6)
+  sentAt             DateTime?    @map("sent_at") @db.Timestamptz(6)
+  failureReason      String?      @map("failure_reason") @db.Text
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  guild              DiscordGuild @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@index([status, scheduledFor], map: "discord_notifications_status_scheduled_idx")
+  @@map("discord_notifications")
+}
+
+model DiscordDedupeClaim {
+  key       String    @id @map("key") @db.VarChar(255)
+  metadata  Json      @default("{}") @map("metadata")
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt], map: "discord_dedupe_claims_expires_idx")
+  @@map("discord_dedupe_claims")
+}
+
+model DiscordWebhookReceipt {
+  id              String        @id @default(cuid()) @map("id")
+  guildId         String?       @map("guild_id") @db.VarChar(32)
+  source          String        @map("source") @db.VarChar(64)
+  externalEventId String        @map("external_event_id") @db.VarChar(255)
+  signatureHash   String        @map("signature_hash") @db.VarChar(64)
+  payload         Json          @map("payload")
+  receivedAt      DateTime      @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt     DateTime?     @map("processed_at") @db.Timestamptz(6)
+  error           String?       @map("error") @db.Text
+  guild           DiscordGuild? @relation(fields: [guildId], references: [guildId], onDelete: SetNull)
+
+  @@unique([source, externalEventId], map: "discord_webhook_receipts_source_event_key")
+  @@index([processedAt], map: "discord_webhook_receipts_processed_idx")
+  @@map("discord_webhook_receipts")
+}

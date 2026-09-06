@@ -1,0 +1,22 @@
+import { Client, REST, Routes } from "discord.js";
+import { ControlPlaneApi } from "../api-client.js";
+import { createAccountServices } from "../services/account-adapters.js";
+import { createCommandRegistry } from "../commands.js";
+import { loadConfig } from "../config.js";
+import { prisma } from "../database.js";
+import { createLogger } from "../logger.js";
+import { SetupResourceStore } from "../setup/prisma-setup.js";
+import { ServerSetupService } from "../setup/services/server-setup.service.js";
+
+const config = loadConfig();
+if (!config.DISCORD_TOKEN) throw new Error("DISCORD_TOKEN is required to register commands");
+const logger = createLogger(config);
+const client = new Client({ intents: [] });
+const api = new ControlPlaneApi(config, logger);
+const account = createAccountServices(prisma, api, client, config, logger);
+const setup = new ServerSetupService(new SetupResourceStore(prisma));
+const definitions = createCommandRegistry({ database: prisma, client, logger, account, setup }).definitions();
+const rest = new REST({ version: "10" }).setToken(config.DISCORD_TOKEN);
+await rest.put(Routes.applicationGuildCommands(config.DISCORD_CLIENT_ID, config.DISCORD_GUILD_ID), { body: definitions });
+logger.info({ commandCount: definitions.length, guildId: config.DISCORD_GUILD_ID }, "registered guild commands");
+await prisma.$disconnect();

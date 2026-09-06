@@ -1,0 +1,16 @@
+config-version: 1
+events:
+  enabled: true
+  world-id: colosseum
+  lifecycle: [DRAFT, SCHEDULED, REGISTRATION_OPEN, CHECK_IN, STARTING, LIVE, FINISHED, ARCHIVED]
+  event-types:
+    SKY_DUELS: {min-players: 2, max-players: 32, teams-supported: false}
+    BLOCK_RUSH: {min-players: 4, max-players: 32, teams-supported: true}
+    GAUNTLET: {min-players: 16, max-players: 64, teams-supported: true, default-schedule: "FRIDAY 20:00 UTC"}
+    CUSTOM: {min-players: 2, max-players: 64, teams-supported: true}
+  registration: {allow-waitlist: true, require-check-in: true, check-in-opens-minutes-before-start: 30}
+  rewards: {currency: EVENT_POINTS, dispatch-only-after-finished: true}
+  instances: {template-world: nx_colosseum, reset-after-event: true, preserve-results: true}
+  arenas:
+    sky-duels-alpha: {name: "Sky Duels Alpha", world-id: colosseum, game-type: SKY_DUELS, minimum-players: 2, maximum-players: 2, spawn-points: ["0.5,80,0.5", "40.5,80,0.5"], spectator-spawn: "20.5,92,0.5", bounds: {min: "-64,0,-64", max: "64,160,64"}, reset-policy: TEMPLATE_RESTORE}
+    gauntlet-01: {name: "Gauntlet 01", world-id: colosseum, game-type: GAUNTLET, minimum-players: 16, maximum-players: 64, spawn-points: [], spectator-spawn: "0.5,120,0.5", bounds: {min: "-512,0,-512", max: "512,256,512"}, reset-policy: TEMPLATE_RESTORE}

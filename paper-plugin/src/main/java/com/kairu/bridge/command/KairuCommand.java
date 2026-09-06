@@ -26,6 +26,7 @@ public final class KairuCommand implements CommandExecutor, TabCompleter {
             case "status" -> status(sender);
             case "reload" -> reload(sender);
             case "sync" -> sync(sender, label, args);
+            case "maintenance" -> maintenance(sender, label, args);
             default -> help(sender, label);
         }
         return true;
@@ -66,12 +67,21 @@ public final class KairuCommand implements CommandExecutor, TabCompleter {
         plugin.syncPlayer(target, sender);
     }
 
-    private void help(CommandSender sender, String label) { sender.sendMessage(ChatColor.AQUA + "KairuBridge: /" + label + " link <code>, /" + label + " status, /" + label + " reload, /" + label + " sync <player>"); }
+    private void maintenance(CommandSender sender, String label, String[] args) {
+        if (!sender.hasPermission("kairu.admin")) { denied(sender); return; }
+        if (args.length < 2) { sender.sendMessage(error("Usage: /" + label + " maintenance <message>")); return; }
+        String message = String.join(" ", Arrays.copyOfRange(args, 1, args.length)).trim();
+        if (message.isEmpty() || message.codePointCount(0, message.length()) > 240) { sender.sendMessage(error("Maintenance message must contain 1 to 240 characters.")); return; }
+        plugin.notifyMaintenance(message, true);
+        sender.sendMessage(ChatColor.GREEN + "Kairu: maintenance notice queued.");
+    }
+
+    private void help(CommandSender sender, String label) { sender.sendMessage(ChatColor.AQUA + "KairuBridge: /" + label + " link <code>, /" + label + " status, /" + label + " reload, /" + label + " sync <player>, /" + label + " maintenance <message>"); }
     private static void denied(CommandSender sender) { sender.sendMessage(error("You do not have permission.")); }
     private static String error(String text) { return ChatColor.RED + "Kairu: " + text; }
 
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) return Arrays.asList("link", "status", "reload", "sync").stream().filter(x -> x.startsWith(args[0].toLowerCase(Locale.ROOT))).collect(Collectors.toList());
+        if (args.length == 1) return Arrays.asList("link", "status", "reload", "sync", "maintenance").stream().filter(x -> x.startsWith(args[0].toLowerCase(Locale.ROOT))).collect(Collectors.toList());
         if (args.length == 2 && args[0].equalsIgnoreCase("sync") && sender.hasPermission("kairu.admin")) return null;
         return Collections.emptyList();
     }

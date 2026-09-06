@@ -1,0 +1,8 @@
+package gg.neonnexus.smpplatform.lifecycle.quarry;
+
+/** Explicit safety stages for The Quarry's Monday 04:00 UTC reset. */
+public enum QuarryResetState {
+    IDLE, SCHEDULED, WARNING_24H, WARNING_1H, WARNING_15M, WARNING_5M, WARNING_1M,
+    LOCKING_ENTRY, EVACUATING, VERIFYING_EMPTY, SAVING, BACKING_UP, VERIFYING_BACKUP,
+    UNLOADING, REGENERATING, LOADING, VALIDATING, OPENING, COMPLETED, ABORTED, FAILED
+}

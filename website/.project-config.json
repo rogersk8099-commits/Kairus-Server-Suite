@@ -1,0 +1,34 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [],
+  "dev_command": "pnpm run dev",
+  "env_vars": {},
+  "experiments": null,
+  "git_remote": {
+    "repo_url": "https://7f0548f6b28a1758d9bf7be630d36cb4.artifacts.cloudflare.net/git/prod/bwhAT6Gncf5adGzfLNso87.git",
+    "expiration": "2026-09-07T13:29:37.775Z",
+    "token": "art_v2_x_b34153b9fe58038afcf034b3adbb041cf2e37b8a?expires=1788787777",
+    "backend": "GIT_BACKEND_ARTIFACTS"
+  },
+  "name": "neon-nexus-hub",
+  "path": "/home/ubuntu/neon-nexus-hub",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "WQzrhC4PcgEeeWkpDjfKTj",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "JWT_SECRET": "Uq9oqFXQkp8bbc9Khw7koE",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "Kyle Rogers",
+    "OWNER_OPEN_ID": "Nx3tV6A84T5f9MXcwn7zR3",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "57a69d2c-d60c-4c83-9812-08f3d2eec229",
+    "VITE_APP_ID": "bwhAT6Gncf5adGzfLNso87",
+    "VITE_APP_LOGO": "",
+    "VITE_APP_TITLE": "Neon Nexus Hub",
+    "VITE_FRONTEND_FORGE_API_KEY": "K37ujyA8dcPRSsNGD6UePr",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-static",
+  "test_command": "pnpm test"
+}

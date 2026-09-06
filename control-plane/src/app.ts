@@ -2,9 +2,11 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { LogController, type FastifyInstance, type FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
+import { registerAuthRoutes } from "./auth/routes.js";
+import type { AuthStore } from "./auth/types.js";
 import { AppError } from "./errors.js";
 import { getBearerToken, hashLinkCode, safeSecretEquals } from "./security.js";
-import type { AppConfig, ControlPlaneStore, PlayerSnapshot } from "./types.js";
+import { bridgeEventTypes, type AppConfig, type ControlPlaneStore, type PlayerSnapshot } from "./types.js";
 
 const uuid = z.string().uuid();
 const serverId = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/);
@@ -55,6 +57,49 @@ const queueCommandSchema = z.discriminatedUnion("commandType", [
   z.object({ serverId, commandType: z.literal("notification"), payload: z.object({ player: playerName, message: z.string().trim().min(1).max(512) }).strict() }).strict()
 ]);
 
+const safeId = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
+const boundedContent = z.string().trim().min(1).max(500).refine((value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(value), "content contains prohibited control characters");
+const optionalWorld = z.string().trim().min(1).max(128).refine((value) => !/[\p{Cc}\p{Cf}]/u.test(value), "world name contains prohibited characters").optional();
+const detailValue = z.string().trim().min(1).max(160).refine((value) => !/[\u0000-\u001F\u007F]/u.test(value), "detail contains prohibited control characters");
+const detailsSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,47}$/), detailValue).superRefine((details, context) => {
+  if (Object.keys(details).length > 8) context.addIssue({ code: z.ZodIssueCode.too_big, maximum: 8, type: "array", inclusive: true, message: "details may contain at most 8 entries" });
+});
+const bridgeEventSchema = z.object({
+  eventId: safeId,
+  eventType: z.enum(bridgeEventTypes),
+  occurredAt: z.string().datetime({ offset: true }),
+  worldName: optionalWorld,
+  minecraftUuid: uuid.optional(),
+  minecraftName: z.string().trim().min(1).max(16).regex(/^[A-Za-z0-9_]{1,16}$/).optional(),
+  content: z.string().trim().max(500).refine((value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(value), "content contains prohibited control characters"),
+  details: detailsSchema.optional()
+}).strict();
+const chatLimitSchema = z.coerce.number().int().min(1).max(50).default(20);
+const chatAckSchema = z.object({
+  status: z.enum(["delivered", "rejected"]),
+  detail: z.string().trim().min(1).max(500).refine((value) => !/[\u0000-\u001F\u007F]/u.test(value), "detail contains prohibited control characters")
+}).strict();
+const queueChatSchema = z.object({
+  serverId,
+  content: boundedContent,
+  displayName: z.string().trim().min(1).max(48).refine((value) => !/[\p{Cc}\p{Cf}]/u.test(value), "displayName contains prohibited characters").optional(),
+  targetWorld: optionalWorld,
+  discordMessageId: z.string().regex(/^\d{5,32}$/).optional(),
+  discordAuthorId: z.string().regex(/^\d{5,32}$/).optional(),
+  idempotencyKey: safeId.optional()
+}).strict().superRefine((value, context) => {
+  if (!value.discordMessageId && !value.idempotencyKey) context.addIssue({ code: z.ZodIssueCode.custom, message: "discordMessageId or idempotencyKey is required", path: ["idempotencyKey"] });
+});
+
+function chatProjection(message: Awaited<ReturnType<ControlPlaneStore["listQueuedChatMessages"]>>[number]) {
+  return {
+    id: message.id,
+    content: message.content,
+    ...(message.displayName ? { displayName: message.displayName, author: { displayName: message.displayName } } : {}),
+    ...(message.targetWorld ? { targetWorld: message.targetWorld } : {})
+  };
+}
+
 function requireHeader(request: FastifyRequest, name: string): string {
   const value = request.headers[name] as string | string[] | undefined;
   const single = Array.isArray(value) ? value[0] : value;
@@ -93,12 +138,28 @@ function achievements(snapshot: PlayerSnapshot | null) {
   ];
 }
 
-export function buildApp(config: AppConfig, store: ControlPlaneStore): FastifyInstance {
+export function buildApp(config: AppConfig, store: ControlPlaneStore, authStore?: AuthStore): FastifyInstance {
   const app = Fastify({
     logger: {
       level: config.logLevel,
       redact: {
-        paths: ["req.headers.authorization", "req.headers.x-discord-user-id", "req.body.code", "req.body.bedrockXuid", "config.pluginApiKey", "config.adminApiKey", "config.discordBotToken"],
+        paths: [
+          "req.headers.authorization",
+          "req.headers.x-discord-user-id",
+          "req.body.code",
+          "req.body.codeVerifier",
+          "req.body.state",
+          "req.body.ticket",
+          "req.body.sessionToken",
+          "req.body.csrfToken",
+          "req.body.bedrockXuid",
+          "config.pluginApiKey",
+          "config.adminApiKey",
+          "config.websiteApiSecret",
+          "config.sessionSecret",
+          "config.discordOAuthClientSecret",
+          "config.discordBotToken"
+        ],
         censor: "[REDACTED]"
       }
     },
@@ -133,6 +194,8 @@ export function buildApp(config: AppConfig, store: ControlPlaneStore): FastifyIn
     request.log.error({ err: error, requestId: request.id }, "unhandled request error");
     return reply.status(500).send({ error: { code: "INTERNAL_ERROR", message: "Internal server error" }, requestId: request.id });
   });
+
+  if (authStore) registerAuthRoutes(app, config, authStore);
 
   app.get("/health", async () => ({ status: "ok", storage: store.kind, timestamp: new Date().toISOString() }));
 
@@ -199,11 +262,55 @@ export function buildApp(config: AppConfig, store: ControlPlaneStore): FastifyIn
     if (!command) throw new AppError(404, "COMMAND_NOT_FOUND", "Queued command was not found or was already acknowledged");
     return { command };
   });
+  app.post("/api/plugin/bridge-events", { config: { rateLimit: { max: 600, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const authenticatedServerId = requirePlugin(request, config);
+    const body = bridgeEventSchema.parse(request.body);
+    const result = await store.recordBridgeEvent({
+      serverId: authenticatedServerId,
+      eventId: body.eventId,
+      eventType: body.eventType,
+      occurredAt: new Date(body.occurredAt).toISOString(),
+      worldName: body.worldName ?? null,
+      minecraftUuid: body.minecraftUuid ?? null,
+      minecraftName: body.minecraftName ?? null,
+      content: body.content,
+      details: body.details ?? {}
+    });
+    return reply.code(result.created ? 201 : 200).send({ event: result.event, duplicate: !result.created });
+  });
+  app.get("/api/plugin/chat/queued", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (request) => {
+    const authenticatedServerId = requirePlugin(request, config);
+    const limit = chatLimitSchema.parse((request.query as { limit?: unknown }).limit);
+    const messages = await store.listQueuedChatMessages(authenticatedServerId, limit);
+    return { messages: messages.map(chatProjection) };
+  });
+  app.post("/api/plugin/chat/:id/ack", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (request) => {
+    const authenticatedServerId = requirePlugin(request, config);
+    const messageId = safeId.parse((request.params as { id?: string }).id);
+    const body = chatAckSchema.parse(request.body);
+    const message = await store.acknowledgeChatMessage(authenticatedServerId, messageId, body.status, body.detail);
+    if (!message) throw new AppError(404, "CHAT_MESSAGE_NOT_FOUND", "Queued chat message was not found or was already acknowledged");
+    return { message };
+  });
 
   app.post("/api/admin/plugin-commands", async (request, reply) => {
     requireAdmin(request, config);
     const body = queueCommandSchema.parse(request.body);
     return reply.code(201).send({ command: await store.queuePluginCommand(body) });
+  });
+  app.post("/api/admin/chat", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (request, reply) => {
+    requireAdmin(request, config);
+    const body = queueChatSchema.parse(request.body);
+    const result = await store.queueChatMessage({
+      serverId: body.serverId,
+      content: body.content,
+      displayName: body.displayName ?? null,
+      targetWorld: body.targetWorld ?? null,
+      discordMessageId: body.discordMessageId ?? null,
+      discordAuthorId: body.discordAuthorId ?? null,
+      idempotencyKey: body.idempotencyKey ?? null
+    });
+    return reply.code(result.created ? 201 : 200).send({ message: result.message, duplicate: !result.created });
   });
 
   return app;

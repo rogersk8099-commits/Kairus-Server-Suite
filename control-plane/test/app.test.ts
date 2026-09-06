@@ -93,6 +93,64 @@ describe("Kairu control plane API", () => {
     expect((await app.inject({ method: "POST", url: `/api/plugin/commands/${id}/ack`, headers: pluginHeaders, payload: { status: "completed" } })).statusCode).toBe(404);
   });
 
+
+  it("authenticates, strictly validates, and idempotently records server-isolated bridge events", async () => {
+    const { app } = setup(); apps.push(app);
+    const payload = {
+      eventId: "event_123",
+      eventType: "CHAT",
+      occurredAt: "2026-09-06T20:00:00Z",
+      worldName: "world",
+      minecraftUuid: uuid,
+      minecraftName: "Alex",
+      content: "Hello Discord",
+      details: { source: "minecraft" }
+    };
+    expect((await app.inject({ method: "POST", url: "/api/plugin/bridge-events", payload })).statusCode).toBe(401);
+    const created = await app.inject({ method: "POST", url: "/api/plugin/bridge-events", headers: pluginHeaders, payload });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ duplicate: false, event: { serverId: "primary", eventId: "event_123", eventType: "CHAT" } });
+    const duplicate = await app.inject({ method: "POST", url: "/api/plugin/bridge-events", headers: pluginHeaders, payload: { ...payload, content: "retry body is ignored" } });
+    expect(duplicate.statusCode).toBe(200);
+    expect(duplicate.json()).toMatchObject({ duplicate: true, event: { content: "Hello Discord" } });
+    const otherServer = await app.inject({ method: "POST", url: "/api/plugin/bridge-events", headers: { ...pluginHeaders, "x-kairu-server-id": "secondary" }, payload });
+    expect(otherServer.statusCode).toBe(201);
+    const invalid = await app.inject({ method: "POST", url: "/api/plugin/bridge-events", headers: pluginHeaders, payload: { ...payload, serverId: "spoofed", content: "x".repeat(501) } });
+    expect(invalid.statusCode).toBe(400);
+  });
+
+  it("queues bounded admin chat and enforces stable per-server poll and atomic ack isolation", async () => {
+    const { app } = setup(); apps.push(app);
+    const adminHeaders = { authorization: `Bearer ${config.adminApiKey}` };
+    const firstPayload = { serverId: "primary", idempotencyKey: "discord_001", discordMessageId: "123456789012345678", discordAuthorId: "234567890123456789", displayName: "Ada", targetWorld: "world", content: "Hello Minecraft" };
+    expect((await app.inject({ method: "POST", url: "/api/admin/chat", payload: firstPayload })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/admin/chat", headers: adminHeaders, payload: { serverId: "primary", content: "No durable key" } })).statusCode).toBe(400);
+    const first = await app.inject({ method: "POST", url: "/api/admin/chat", headers: adminHeaders, payload: firstPayload });
+    expect(first.statusCode).toBe(201);
+    const firstId = first.json().message.id as string;
+    const replay = await app.inject({ method: "POST", url: "/api/admin/chat", headers: adminHeaders, payload: { ...firstPayload, content: "Changed retry body" } });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ duplicate: true, message: { id: firstId, content: "Hello Minecraft" } });
+    const second = await app.inject({ method: "POST", url: "/api/admin/chat", headers: adminHeaders, payload: { serverId: "primary", idempotencyKey: "discord_002", content: "Second" } });
+    expect(second.statusCode).toBe(201);
+    await app.inject({ method: "POST", url: "/api/admin/chat", headers: adminHeaders, payload: { serverId: "secondary", idempotencyKey: "discord_003", content: "Private other server" } });
+    const limited = await app.inject({ method: "GET", url: "/api/plugin/chat/queued?limit=1", headers: pluginHeaders });
+    expect(limited.statusCode).toBe(200);
+    expect(limited.json().messages).toEqual([{ id: firstId, content: "Hello Minecraft", displayName: "Ada", author: { displayName: "Ada" }, targetWorld: "world" }]);
+    expect((await app.inject({ method: "GET", url: "/api/plugin/chat/queued?limit=51", headers: pluginHeaders })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/plugin/chat/queued?limit=10", headers: { ...pluginHeaders, "x-kairu-server-id": "third" } })).json().messages).toEqual([]);
+    expect((await app.inject({ method: "POST", url: `/api/plugin/chat/${firstId}/ack`, headers: { ...pluginHeaders, "x-kairu-server-id": "secondary" }, payload: { status: "delivered", detail: "spoof" } })).statusCode).toBe(404);
+    const ack = await app.inject({ method: "POST", url: `/api/plugin/chat/${firstId}/ack`, headers: pluginHeaders, payload: { status: "delivered", detail: "broadcast to Minecraft" } });
+    expect(ack.statusCode).toBe(200);
+    expect(ack.json().message).toMatchObject({ id: firstId, status: "delivered", deliveryAttempts: 1 });
+    expect((await app.inject({ method: "POST", url: `/api/plugin/chat/${firstId}/ack`, headers: pluginHeaders, payload: { status: "delivered", detail: "repeat" } })).statusCode).toBe(404);
+    const secondId = second.json().message.id as string;
+    const rejected = await app.inject({ method: "POST", url: `/api/plugin/chat/${secondId}/ack`, headers: pluginHeaders, payload: { status: "rejected", detail: "target world is not loaded" } });
+    expect(rejected.json().message).toMatchObject({ status: "rejected", acknowledgementDetail: "target world is not loaded" });
+    expect(rejected.json().message.deadLetteredAt).toBeTypeOf("string");
+    expect((await app.inject({ method: "GET", url: "/api/plugin/chat/queued", headers: pluginHeaders })).json().messages).toEqual([]);
+  });
+
   it("rejects invalid player identity header and applies CORS only to the configured origin", async () => {
     const { app } = setup(); apps.push(app);
     expect((await app.inject({ method: "GET", url: "/api/me", headers: { "x-discord-user-id": "not-a-snowflake" } })).statusCode).toBe(400);

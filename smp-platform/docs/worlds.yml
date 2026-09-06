@@ -1,0 +1,191 @@
+# Canonical local bootstrap/cache. IDs and display names are contractual.
+config-version: 1
+registry:
+  revision: 1
+  source: "LOCAL_BOOTSTRAP"
+  synced-at: null
+  exact-world-ids: [ashfall, obsidian-gate, atrium, colosseum, quarry, verdance]
+  future-world-types-allowed: true
+worlds:
+  ashfall:
+    id: ashfall
+    minecraft-world-name: nx_ashfall
+    display-name: "Ashfall"
+    public-type: "Survival"
+    module-type: SURVIVAL
+    season: "Season 7"
+    status: LIVE
+    description: "The flagship survival map. Nation borders, claim wars and a player-run economy on redstone freight lines."
+    size: "24k x 24k"
+    difficulty: HARD
+    border-size: 24000
+    environment: NORMAL
+    game-mode: SURVIVAL
+    pvp-mode: ENABLED
+    guilds: FULL
+    points-enabled: true
+    currency-id: NEXUS_POINTS
+    claims-enabled: true
+    economy-enabled: true
+    inventory-group: ASHFALL_GROUP
+    reset-policy: {mode: SEASONAL, schedule: null}
+    archive-policy: {mode: ARCHIVE_AT_SEASON_END, read-only-after-archive: true}
+    access-permission: smpplatform.world.ashfall
+    spawn: {x: 0.5, y: 80.0, z: 0.5, yaw: 0.0, pitch: 0.0}
+    website-visible: true
+    map-visible: true
+    discord-chat-enabled: true
+    maintenance-mode: false
+  obsidian-gate:
+    id: obsidian-gate
+    minecraft-world-name: nx_obsidian_gate
+    display-name: "Obsidian Gate"
+    public-type: "Hardcore"
+    module-type: HARDCORE
+    season: "Season 7"
+    status: LIVE
+    description: "One life. Shared world. Death moves players to spectator until the Sunday-night reset window."
+    size: "8k x 8k"
+    difficulty: HARD
+    website-difficulty: "Brutal"
+    border-size: 8000
+    environment: NORMAL
+    game-mode: SURVIVAL
+    pvp-mode: ENABLED
+    guilds: CONFIGURABLE
+    points-enabled: true
+    currency-id: HARDCORE_POINTS
+    claims-enabled: false
+    economy-enabled: false
+    inventory-group: HARDCORE_GROUP
+    reset-policy: {mode: CONFIGURED_HARDCORE_WINDOW, schedule-ref: hardcore.reset}
+    archive-policy: {mode: SNAPSHOT_ON_SEASON_END, read-only-after-archive: true}
+    access-permission: smpplatform.world.obsidian-gate
+    spawn: {x: 0.5, y: 90.0, z: 0.5, yaw: 0.0, pitch: 0.0}
+    website-visible: true
+    map-visible: true
+    discord-chat-enabled: true
+    maintenance-mode: false
+  atrium:
+    id: atrium
+    minecraft-world-name: nx_atrium
+    display-name: "The Atrium"
+    public-type: "Creative"
+    module-type: CREATIVE
+    season: "Permanent"
+    status: LIVE
+    description: "Plot-based creative sandbox with WorldEdit, custom palettes and monthly featured build showcases."
+    size: "Plots 128x128"
+    difficulty: PEACEFUL
+    border-size: 24000
+    environment: NORMAL
+    game-mode: CREATIVE
+    pvp-mode: DISABLED
+    guilds: SOCIAL_OPTIONAL
+    points-enabled: true
+    currency-id: BUILD_POINTS
+    claims-enabled: false
+    economy-enabled: false
+    inventory-group: CREATIVE_GROUP
+    reset-policy: {mode: PERMANENT, schedule: null}
+    archive-policy: {mode: BACKUP_ONLY, read-only-after-archive: false}
+    access-permission: smpplatform.world.atrium
+    spawn: {x: 0.5, y: 80.0, z: 0.5, yaw: 0.0, pitch: 0.0}
+    website-visible: true
+    map-visible: true
+    discord-chat-enabled: true
+    maintenance-mode: false
+    plotsquared: {enabled: true, plot-size: 128, road-width: 7, area-id: "atrium_main"}
+  colosseum:
+    id: colosseum
+    minecraft-world-name: nx_colosseum
+    display-name: "Neon Colosseum"
+    public-type: "Events"
+    module-type: EVENT
+    season: "Rotating"
+    status: LIVE
+    description: "Arena network for Sky Duels, Block Rush and Friday-night 64-player Gauntlet tournaments."
+    size: "Instanced"
+    difficulty: NORMAL
+    border-size: 0
+    environment: NORMAL
+    game-mode: ADVENTURE
+    pvp-mode: EVENT_CONTROLLED
+    guilds: TEAM_COMPETITION
+    points-enabled: true
+    currency-id: EVENT_POINTS
+    claims-enabled: false
+    economy-enabled: false
+    inventory-group: EVENT_GROUP
+    reset-policy: {mode: PER_EVENT_INSTANCE, schedule: null}
+    archive-policy: {mode: RESULTS_AND_INSTANCE_BACKUP, read-only-after-archive: false}
+    access-permission: smpplatform.world.colosseum
+    spawn: {x: 0.5, y: 80.0, z: 0.5, yaw: 0.0, pitch: 0.0}
+    website-visible: true
+    map-visible: false
+    discord-chat-enabled: true
+    maintenance-mode: false
+  quarry:
+    id: quarry
+    minecraft-world-name: nx_quarry
+    display-name: "The Quarry"
+    public-type: "Resource"
+    module-type: RESOURCE
+    season: "Weekly reset"
+    status: SEASONAL
+    description: "Resource world that regenerates every Monday 04:00 UTC to protect the main map terrain."
+    size: "12k x 12k"
+    difficulty: NORMAL
+    border-size: 12000
+    environment: NORMAL
+    game-mode: SURVIVAL
+    pvp-mode: ENABLED
+    guilds: INHERIT_ASHFALL
+    points-enabled: true
+    currency-id: NEXUS_POINTS
+    claims-enabled: false
+    economy-enabled: true
+    inventory-group: ASHFALL_GROUP
+    reset-policy:
+      mode: SCHEDULED_REGENERATE
+      timezone: UTC
+      cron: "0 4 * * MON"
+      backup-required: true
+      abort-on-backup-failure: true
+      evacuation-destination-world-id: ashfall
+    archive-policy: {mode: NONE, read-only-after-archive: false}
+    access-permission: smpplatform.world.quarry
+    spawn: {x: 0.5, y: 80.0, z: 0.5, yaw: 0.0, pitch: 0.0}
+    website-visible: true
+    map-visible: true
+    discord-chat-enabled: true
+    maintenance-mode: false
+  verdance:
+    id: verdance
+    minecraft-world-name: nx_verdance
+    display-name: "Verdance"
+    public-type: "Survival"
+    module-type: ARCHIVE
+    season: "Season 6"
+    status: ARCHIVED
+    description: "The Season 6 map, frozen and open for tours; members may obtain its world file through the portal."
+    size: "20k x 20k"
+    difficulty: HARD
+    border-size: 20000
+    environment: NORMAL
+    game-mode: ADVENTURE
+    pvp-mode: DISABLED
+    guilds: READ_ONLY_HISTORICAL
+    points-enabled: false
+    currency-id: null
+    claims-enabled: false
+    economy-enabled: false
+    inventory-group: ARCHIVE_GROUP
+    reset-policy: {mode: NEVER, schedule: null}
+    archive-policy: {mode: TOUR_ONLY, read-only-after-archive: true}
+    access-permission: smpplatform.world.verdance
+    spawn: {x: 0.5, y: 80.0, z: 0.5, yaw: 0.0, pitch: 0.0}
+    website-visible: true
+    map-visible: true
+    discord-chat-enabled: false
+    maintenance-mode: false

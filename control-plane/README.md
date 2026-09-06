@@ -1,8 +1,6 @@
 # Kairu Control Plane
 
-**Kairu Control Plane** is the Railway-hosted Node.js 22 service for the Kairu SMP website API, Paper/Purpur telemetry integration, Discord identity linking, queued server commands, and Discord slash commands. It implements the API and bot behavior in the repository integration contract. The HTTP API always starts. The Discord gateway client is deliberately optional and starts only when `DISCORD_BOT_TOKEN` is configured.
-
-> The initial player portal uses `X-Discord-User-Id` as a **development bridge**. It is not browser authentication. Replace it with signed Discord OAuth sessions before opening player portal endpoints publicly.
+**Kairu Control Plane** is the Railway-hosted Node.js 22 service for the Kairu SMP website API, Discord OAuth identities and sessions, Paper/Purpur telemetry, queued platform chat, and server commands. The HTTP API always starts. The legacy embedded gateway remains optional, while the full Discord ecosystem bot is deployed as the dedicated `discord-bot` service.
 
 ## Architecture
 
@@ -12,7 +10,7 @@ The service uses **Fastify**, **Zod**, **PostgreSQL via `pg`**, and **discord.js
 | --- | --- |
 | HTTP platform | Fastify with structured Pino JSON logs, request IDs, redaction, CORS, and rate limits |
 | Validation | Strict Zod schemas for telemetry, snapshots, link completion, acknowledgements, and administrative command queuing |
-| Authentication | Constant-time comparison of bearer tokens for plugin and administrative endpoints |
+| Authentication | Discord OAuth authorization code with PKCE and one-use states/tickets; hashed revocable website sessions; constant-time bearer authentication for service endpoints |
 | Storage | PostgreSQL schema migrations; in-memory store when `DATABASE_URL` is absent |
 | Identity linking | Cryptographically random 20-byte code, SHA-256 storage hash, ten-minute expiry, one-time transactional consumption |
 | Discord | discord.js gateway bot, deployable slash-command registration script, ephemeral link/unlink interaction responses |
@@ -51,6 +49,12 @@ No secret is included in this repository. Replace every placeholder with a gener
 | `DATABASE_URL` | Yes in Railway | PostgreSQL connection URL. Omit only for non-persistent local development/tests. |
 | `PLUGIN_API_KEY` | Yes for plugin API | Long random bearer secret used by the Paper plugin. |
 | `ADMIN_API_KEY` | Yes for administrative queue API | Separate long random bearer secret. Never expose it to clients. |
+| `WEBSITE_API_SECRET` | Yes for website auth | Dedicated website-to-control-plane bearer secret; must differ from plugin and administrative credentials. |
+| `SESSION_SECRET` | Yes for OAuth | HMAC key for OAuth states, login tickets, and sessions; use the matching value on the website service. |
+| `WEBSITE_URL` | Yes for OAuth | Exact public HTTPS website origin without a trailing slash or path. |
+| `DISCORD_OAUTH_CLIENT_ID` | Yes for OAuth | Discord application snowflake used by the website sign-in flow. |
+| `DISCORD_OAUTH_CLIENT_SECRET` | Yes for OAuth | Discord OAuth client secret; control-plane secret store only. |
+| `DISCORD_OAUTH_REDIRECT_URI` | Yes for OAuth | Exact callback URI, normally `https://<website>/auth/discord/callback`. |
 | `DISCORD_BOT_TOKEN` | No | Discord bot token. Its presence starts the bot after the API begins listening. |
 | `DISCORD_APPLICATION_ID` | With bot token | Discord application snowflake; required for command registration and validated at startup. |
 | `DISCORD_GUILD_ID` | No | Development guild target for immediate command updates. Omit for global commands. |
@@ -74,9 +78,22 @@ All responses are JSON. Validation, authorization, and internal failures return 
 | `GET` | `/api/leaderboard` | Up to 100 players ordered by recorded playtime. |
 | `GET` | `/api/membership/tiers` | Configured membership tiers. |
 
+### Website authentication API
+
+The website calls the internal OAuth endpoints with `WEBSITE_API_SECRET`. The browser never calls these endpoints directly and never receives a provider token, API secret, raw session token, or login ticket.
+
+| Method | Endpoint | Result |
+| --- | --- | --- |
+| `POST` | `/internal/auth/oauth/states` | Creates a short-lived, HMAC-hashed OAuth state and PKCE challenge. |
+| `POST` | `/internal/auth/discord/callback` | Atomically consumes state, exchanges the Discord code, upserts the platform user, and returns a one-use ticket. |
+| `POST` | `/internal/auth/tickets/redeem` | Consumes the ticket and creates a hashed, revocable session. |
+| `POST` | `/internal/auth/sessions/validate` | Validates a server-held session and returns the current platform principal. |
+| `POST` | `/internal/auth/sessions/revoke` | Revokes the current session during logout. |
+| `POST` | `/internal/auth/demo` | Non-production development helper only. Disabled in production. |
+
 ### Player portal API
 
-The temporary bridge requires an `X-Discord-User-Id` header containing a Discord snowflake. A request without a completed link returns `404 NOT_LINKED`.
+Private portal calls use the validated platform session principal. A request without a current linked Minecraft identity returns `404 NOT_LINKED` where link data is required.
 
 | Method | Endpoint | Result |
 | --- | --- | --- |
@@ -95,6 +112,9 @@ Every plugin request must carry both `Authorization: Bearer <PLUGIN_API_KEY>` an
 | `POST` | `/api/link-codes/complete` | One-time Discord code, Minecraft UUID/name, optional Floodgate XUID. Creates identity link once. |
 | `GET` | `/api/plugin/commands` | Retrieves only queued commands for the requesting server. |
 | `POST` | `/api/plugin/commands/:id/ack` | Marks a command `completed` or `failed`; failed acknowledgements require `errorMessage`. |
+| `POST` | `/api/plugin/bridge-events` | Stores a bounded, idempotent Minecraft chat or lifecycle event for central routing. |
+| `GET` | `/api/plugin/chat/queued` | Returns only queued Discord-to-Minecraft messages for the authenticated server ID. |
+| `POST` | `/api/plugin/chat/:id/ack` | Atomically marks one server-scoped chat item delivered or rejected. |
 
 A heartbeat example, with placeholder values only:
 
@@ -108,7 +128,7 @@ curl -X POST "$CONTROL_PLANE_URL/api/plugin/heartbeat" \
 
 ### Administrative queue API
 
-`POST /api/admin/plugin-commands` requires `Authorization: Bearer <ADMIN_API_KEY>`. It queues a strictly validated `whitelist` (`action` and `player`) or `notification` (`player` and `message`) command for one server. This endpoint is intentionally server-side only; no browser should possess `ADMIN_API_KEY`.
+`POST /api/admin/plugin-commands` and `POST /api/admin/chat` require `Authorization: Bearer <ADMIN_API_KEY>`. They queue strictly validated, server-scoped operations. These endpoints are server-side only; no browser should possess `ADMIN_API_KEY`.
 
 ```json
 {
@@ -140,7 +160,7 @@ Global Discord command updates can take up to an hour to propagate. Use `DISCORD
 
 ## Database and migrations
 
-The schema is in [`migrations/001_initial.sql`](migrations/001_initial.sql). It includes heartbeats, player snapshots, hashed link codes, links, queued plugin commands, events, streams, tiers, and a migration ledger. Apply migrations against a configured PostgreSQL URL with:
+Ordered SQL migrations under `migrations/` define telemetry, public content, Discord platform resources, chat/event relay state, and website OAuth identities/sessions. `004_website_auth.sql` adds platform users, one-use OAuth states and login tickets, hashed sessions, and cleanup indexes/functions. Apply migrations against a configured PostgreSQL URL with:
 
 ```bash
 DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DBNAME' npm run migrate:dev
@@ -193,7 +213,7 @@ The test suite verifies health, all public directory endpoints, plugin authoriza
 
 This repository is the control plane only. The Paper/Purpur plugin remains responsible for asynchronous network delivery, its `/kairu` commands, optional Vault/LuckPerms/PlaceholderAPI/Geyser/Floodgate soft integrations, and never blocking Minecraft’s main thread. The control plane accepts optional Floodgate XUID values, but does not require optional Minecraft plugins.
 
-**Before public portal launch, replace the temporary Discord-ID header bridge with signed OAuth sessions, add CSRF protections appropriate to the session design, and perform a threat-model review.**
+**Before public portal launch, register the exact Discord callback URI, provision independent secrets, replay-test migrations against staging, and complete the OAuth threat-model and log-redaction review.**
 
 ## References
 

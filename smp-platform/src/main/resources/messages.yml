@@ -1,0 +1,15 @@
+config-version: 1
+messages:
+  prefix: "<gradient:#c000ff:#4cc9ff><bold>NEON NEXUS</bold></gradient> <dark_gray>»</dark_gray>"
+  no-permission: "<red>You do not have permission to do that.</red>"
+  world-unavailable: "<yellow><world> is currently unavailable. Please try again later.</yellow>"
+  database-degraded: "<red>This action is temporarily unavailable because persistent storage is unhealthy.</red>"
+  confirmation-required: "<yellow>Confirm this action in the next <seconds> seconds.</yellow>"
+  guild-created: "<green>Guild <guild> was created.</green>"
+  points-changed: "<aqua><amount> <currency> recorded. New balance: <balance>.</aqua>"
+  hardcore-death: "<red>You are now spectating until the next configured reset window.</red>"
+  quarry-reset-warning: "<gold>The Quarry resets in <duration>. Please leave safely.</gold>"
+  quarry-reset-aborted: "<red>The Quarry reset was aborted because its backup did not complete.</red>"
+  archive-read-only: "<yellow>Verdance is a protected archive. Touring is allowed; modifications are not.</yellow>"
+  link-created: "<aqua>Enter <code> in the Neon Nexus member portal before it expires.</aqua>"
+  bedrock-compatible-gui: "<aqua>This menu is rendered with Bedrock-compatible controls.</aqua>"

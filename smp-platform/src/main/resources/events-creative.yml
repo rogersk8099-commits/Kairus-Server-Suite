@@ -1,0 +1,14 @@
+# No credentials belong in this file. The platform host provides PostgreSQL/DataSource wiring.
+worlds:
+  colosseum: colosseum
+  atrium: atrium
+events:
+  default-check-in-minutes: 30
+  gauntlet-maximum-players: 64
+  outbox:
+    initial-backoff-seconds: 5
+    maximum-backoff-seconds: 300
+creative:
+  expected-plot-size: 128
+  require-plotsquared-for-submission: true
+  featured-world-id: atrium

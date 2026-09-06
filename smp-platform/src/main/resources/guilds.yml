@@ -1,0 +1,16 @@
+config-version: 1
+guilds:
+  enabled: true
+  name: {min-length: 3, max-length: 24, pattern: "^[A-Za-z0-9 _-]+$", case-insensitive-unique: true}
+  tag: {min-length: 2, max-length: 6, pattern: "^[A-Za-z0-9]+$", case-insensitive-unique: true}
+  description-max-length: 240
+  invite: {ttl-hours: 72, max-pending-per-guild: 20}
+  default-ranks:
+    leader: {priority: 100, permissions: [guild.manage, guild.invite, guild.kick, guild.promote, guild.home, guild.edit]}
+    officer: {priority: 75, permissions: [guild.invite, guild.kick, guild.home, guild.edit]}
+    member: {priority: 50, permissions: [guild.home]}
+    recruit: {priority: 10, permissions: []}
+  world-policy: {ashfall: FULL, obsidian-gate: CONFIGURABLE, atrium: SOCIAL_OPTIONAL, colosseum: TEAM_COMPETITION, quarry: INHERIT_ASHFALL, verdance: READ_ONLY_HISTORICAL}
+  home: {enabled-world-ids: [ashfall, obsidian-gate], cooldown-seconds: 60}
+  website-visibility-default: true
+  discord: {mode: CENTRAL_API_EVENTS_ONLY, create-bot-resources: false}

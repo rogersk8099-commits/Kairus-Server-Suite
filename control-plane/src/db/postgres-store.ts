@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import type {
+  BridgeEventRecord,
+  ChatQueueMessage,
   ControlPlaneStore,
   EventRecord,
   LinkCodeResult,
   LinkIdentity,
   MembershipTier,
+  NewBridgeEvent,
+  NewChatQueueMessage,
   NewPluginCommand,
   PlayerLink,
   PlayerSnapshot,
@@ -32,6 +36,12 @@ function linkFrom(row: DbRow): PlayerLink {
 }
 function commandFrom(row: DbRow): PluginCommand {
   return { id: String(row.id), serverId: String(row.server_id), commandType: row.command_type as PluginCommand["commandType"], payload: row.payload as Record<string, unknown>, status: row.status as PluginCommand["status"], errorMessage: row.error_message ? String(row.error_message) : null, createdAt: timestamp(row.created_at), acknowledgedAt: row.acknowledged_at ? timestamp(row.acknowledged_at) : null };
+}
+function bridgeEventFrom(row: DbRow): BridgeEventRecord {
+  return { id: String(row.id), serverId: String(row.server_id), eventId: String(row.event_id), eventType: row.event_type as BridgeEventRecord["eventType"], occurredAt: timestamp(row.occurred_at), worldName: row.world_name ? String(row.world_name) : null, minecraftUuid: row.minecraft_uuid ? String(row.minecraft_uuid) : null, minecraftName: row.minecraft_name ? String(row.minecraft_name) : null, content: String(row.content), details: row.details as Record<string, string>, receivedAt: timestamp(row.received_at) };
+}
+function chatMessageFrom(row: DbRow): ChatQueueMessage {
+  return { id: String(row.id), serverId: String(row.server_id), idempotencyKey: row.idempotency_key ? String(row.idempotency_key) : null, discordMessageId: row.discord_message_id ? String(row.discord_message_id) : null, discordAuthorId: row.discord_author_id ? String(row.discord_author_id) : null, displayName: row.display_name ? String(row.display_name) : null, targetWorld: row.target_world ? String(row.target_world) : null, content: String(row.content), status: row.status as ChatQueueMessage["status"], deliveryAttempts: Number(row.delivery_attempts), lastAttemptAt: row.last_attempt_at ? timestamp(row.last_attempt_at) : null, acknowledgedAt: row.acknowledged_at ? timestamp(row.acknowledged_at) : null, acknowledgementDetail: row.acknowledgement_detail ? String(row.acknowledgement_detail) : null, deadLetteredAt: row.dead_lettered_at ? timestamp(row.dead_lettered_at) : null, createdAt: timestamp(row.created_at) };
 }
 
 export class PostgresStore implements ControlPlaneStore {
@@ -150,4 +160,53 @@ export class PostgresStore implements ControlPlaneStore {
     const { rows } = await this.pool.query("INSERT INTO plugin_commands (id, server_id, command_type, payload) VALUES ($1,$2,$3,$4::jsonb) RETURNING *", [randomUUID(), command.serverId, command.commandType, JSON.stringify(command.payload)]);
     return commandFrom(rows[0]);
   }
+
+  async recordBridgeEvent(event: NewBridgeEvent): Promise<{ event: BridgeEventRecord; created: boolean }> {
+    const insert = await this.pool.query(
+      `INSERT INTO bridge_events (id, server_id, event_id, event_type, occurred_at, world_name, minecraft_uuid, minecraft_name, content, details)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
+       ON CONFLICT (server_id, event_id) DO NOTHING RETURNING *`,
+      [randomUUID(), event.serverId, event.eventId, event.eventType, event.occurredAt, event.worldName, event.minecraftUuid, event.minecraftName, event.content, JSON.stringify(event.details)]
+    );
+    if (insert.rows[0]) return { event: bridgeEventFrom(insert.rows[0]), created: true };
+    const existing = await this.pool.query("SELECT * FROM bridge_events WHERE server_id = $1 AND event_id = $2", [event.serverId, event.eventId]);
+    if (!existing.rows[0]) throw new Error("Bridge event idempotency lookup failed");
+    return { event: bridgeEventFrom(existing.rows[0]), created: false };
+  }
+
+  async listQueuedChatMessages(serverId: string, limit: number): Promise<ChatQueueMessage[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM chat_relay_queue WHERE server_id = $1 AND status = 'queued' ORDER BY created_at ASC, id ASC LIMIT $2",
+      [serverId, limit]
+    );
+    return rows.map(chatMessageFrom);
+  }
+
+  async acknowledgeChatMessage(serverId: string, id: string, status: "delivered" | "rejected", detail: string): Promise<ChatQueueMessage | null> {
+    const { rows } = await this.pool.query(
+      `UPDATE chat_relay_queue
+       SET status = $3, delivery_attempts = delivery_attempts + 1, last_attempt_at = NOW(), acknowledged_at = NOW(),
+           acknowledgement_detail = $4, dead_lettered_at = CASE WHEN $3 = 'rejected' THEN NOW() ELSE NULL END
+       WHERE id = $1 AND server_id = $2 AND status = 'queued' RETURNING *`,
+      [id, serverId, status, detail]
+    );
+    return rows[0] ? chatMessageFrom(rows[0]) : null;
+  }
+
+  async queueChatMessage(message: NewChatQueueMessage): Promise<{ message: ChatQueueMessage; created: boolean }> {
+    const insert = await this.pool.query(
+      `INSERT INTO chat_relay_queue (id, server_id, idempotency_key, discord_message_id, discord_author_id, display_name, target_world, content)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT DO NOTHING RETURNING *`,
+      [randomUUID(), message.serverId, message.idempotencyKey, message.discordMessageId, message.discordAuthorId, message.displayName, message.targetWorld, message.content]
+    );
+    if (insert.rows[0]) return { message: chatMessageFrom(insert.rows[0]), created: true };
+    const existing = await this.pool.query(
+      `SELECT * FROM chat_relay_queue WHERE server_id = $1 AND (($2::text IS NOT NULL AND idempotency_key = $2) OR ($3::text IS NOT NULL AND discord_message_id = $3)) ORDER BY created_at ASC LIMIT 1`,
+      [message.serverId, message.idempotencyKey, message.discordMessageId]
+    );
+    if (!existing.rows[0]) throw new Error("Chat queue idempotency conflict could not be resolved");
+    return { message: chatMessageFrom(existing.rows[0]), created: false };
+  }
+
 }

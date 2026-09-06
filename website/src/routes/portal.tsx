@@ -1,5 +1,4 @@
-import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import {
   Award,
   CalendarDays,
@@ -12,11 +11,17 @@ import {
   UserRound,
 } from "lucide-react";
 import { site } from "@/config/site";
+import { getSession } from "@/lib/auth.functions";
 import { useAuth } from "@/lib/auth";
 import { portalUser } from "@/data/mock";
 import { Atmosphere } from "@/components/site/primitives";
 
 export const Route = createFileRoute("/portal")({
+  beforeLoad: async () => {
+    const session = await getSession();
+    if (!session) throw redirect({ to: "/login" });
+    return { authenticatedUser: session.user };
+  },
   head: () => ({
     meta: [
       { title: `Member portal — ${site.name}` },
@@ -43,20 +48,9 @@ const links = [
 ] as const;
 
 function PortalLayout() {
-  const { session, ready, signOut } = useAuth();
+  const { authenticatedUser } = Route.useRouteContext();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (ready && !session) navigate({ to: "/login", replace: true });
-  }, [ready, session, navigate]);
-
-  if (!ready || !session) {
-    return (
-      <div className="grid min-h-[60vh] place-items-center text-sm text-muted-foreground">
-        Checking your session…
-      </div>
-    );
-  }
 
   return (
     <div className="relative overflow-hidden">
@@ -65,11 +59,20 @@ function PortalLayout() {
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="panel rounded-lg p-5">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-sm bg-gradient-to-br from-magenta to-electric text-sm font-black text-primary-foreground">
-                {portalUser.avatarSeed}
-              </span>
+              {authenticatedUser.avatarUrl ? (
+                <img
+                  src={authenticatedUser.avatarUrl}
+                  alt=""
+                  className="h-11 w-11 shrink-0 rounded-sm object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-sm bg-gradient-to-br from-magenta to-electric text-sm font-black text-primary-foreground">
+                  {authenticatedUser.displayName.slice(0, 2).toUpperCase()}
+                </span>
+              )}
               <div className="min-w-0">
-                <p className="truncate font-bold">{session.username}</p>
+                <p className="truncate font-bold">{authenticatedUser.displayName}</p>
                 <p className="text-[0.72rem] uppercase tracking-[0.18em] text-magenta">
                   {portalUser.rank}
                 </p>
@@ -91,9 +94,13 @@ function PortalLayout() {
             ))}
             <button
               type="button"
-              onClick={() => {
-                signOut();
-                navigate({ to: "/", replace: true });
+              onClick={async () => {
+                try {
+                  await signOut();
+                  await navigate({ to: "/", replace: true });
+                } catch {
+                  // Keep the user on the protected page if logout could not complete.
+                }
               }}
               className="flex shrink-0 items-center gap-2.5 rounded-sm px-3.5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-destructive"
             >

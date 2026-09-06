@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type {
+  BridgeEventRecord,
+  ChatQueueMessage,
   ControlPlaneStore,
   EventRecord,
   LinkCodeResult,
   LinkIdentity,
   MembershipTier,
+  NewBridgeEvent,
+  NewChatQueueMessage,
   NewPluginCommand,
   PlayerLink,
   PlayerSnapshot,
@@ -25,6 +29,10 @@ export class MemoryStore implements ControlPlaneStore {
   private readonly linksByMinecraft = new Map<string, PlayerLink>();
   private readonly linksByXuid = new Map<string, PlayerLink>();
   private readonly commands = new Map<string, PluginCommand>();
+  private readonly bridgeEvents = new Map<string, BridgeEventRecord>();
+  private readonly chatMessages = new Map<string, ChatQueueMessage>();
+  private readonly chatIdempotencyKeys = new Map<string, string>();
+  private readonly chatDiscordMessageIds = new Map<string, string>();
   private readonly events: EventRecord[];
   private readonly streams: StreamRecord[];
   private readonly tiers: MembershipTier[];
@@ -129,4 +137,58 @@ export class MemoryStore implements ControlPlaneStore {
     this.commands.set(record.id, record);
     return { ...record, payload: { ...record.payload } };
   }
+
+  async recordBridgeEvent(event: NewBridgeEvent): Promise<{ event: BridgeEventRecord; created: boolean }> {
+    const key = `${event.serverId}\0${event.eventId}`;
+    const existing = this.bridgeEvents.get(key);
+    if (existing) return { event: { ...existing, details: { ...existing.details } }, created: false };
+    const record: BridgeEventRecord = { id: randomUUID(), ...event, details: { ...event.details }, receivedAt: new Date().toISOString() };
+    this.bridgeEvents.set(key, record);
+    return { event: { ...record, details: { ...record.details } }, created: true };
+  }
+
+  async listQueuedChatMessages(serverId: string, limit: number): Promise<ChatQueueMessage[]> {
+    return [...this.chatMessages.values()]
+      .filter((message) => message.serverId === serverId && message.status === "queued")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+      .slice(0, limit)
+      .map((message) => ({ ...message }));
+  }
+
+  async acknowledgeChatMessage(serverId: string, id: string, status: "delivered" | "rejected", detail: string): Promise<ChatQueueMessage | null> {
+    const message = this.chatMessages.get(id);
+    if (!message || message.serverId !== serverId || message.status !== "queued") return null;
+    const now = new Date().toISOString();
+    message.status = status;
+    message.deliveryAttempts += 1;
+    message.lastAttemptAt = now;
+    message.acknowledgedAt = now;
+    message.acknowledgementDetail = detail;
+    message.deadLetteredAt = status === "rejected" ? now : null;
+    return { ...message };
+  }
+
+  async queueChatMessage(message: NewChatQueueMessage): Promise<{ message: ChatQueueMessage; created: boolean }> {
+    const idempotencyLookup = message.idempotencyKey ? `${message.serverId}\0${message.idempotencyKey}` : null;
+    const discordLookup = message.discordMessageId ? `${message.serverId}\0${message.discordMessageId}` : null;
+    const existingId = (idempotencyLookup && this.chatIdempotencyKeys.get(idempotencyLookup))
+      || (discordLookup && this.chatDiscordMessageIds.get(discordLookup));
+    if (existingId) return { message: { ...this.chatMessages.get(existingId)! }, created: false };
+    const record: ChatQueueMessage = {
+      id: randomUUID(),
+      ...message,
+      status: "queued",
+      deliveryAttempts: 0,
+      lastAttemptAt: null,
+      acknowledgedAt: null,
+      acknowledgementDetail: null,
+      deadLetteredAt: null,
+      createdAt: new Date().toISOString()
+    };
+    this.chatMessages.set(record.id, record);
+    if (idempotencyLookup) this.chatIdempotencyKeys.set(idempotencyLookup, record.id);
+    if (discordLookup) this.chatDiscordMessageIds.set(discordLookup, record.id);
+    return { message: { ...record }, created: true };
+  }
+
 }

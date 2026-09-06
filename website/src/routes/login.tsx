@@ -93,7 +93,8 @@ function LoginPage() {
                 Continue with Discord
               </button>
               <p className="mt-3 text-center text-xs text-muted-foreground">
-                Secure Discord sign-in is installed and awaiting the server&apos;s Discord application credentials.
+                Secure Discord sign-in is installed and awaiting the server&apos;s Discord
+                application credentials.
               </p>
             </div>
           )}

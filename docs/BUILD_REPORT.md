@@ -1,6 +1,6 @@
 # Build Report
 
-**Kairu SMP Complete Suite · 6 September 2026**
+**Kairu SMP Complete Suite · 7 September 2026**
 
 ## Result
 
@@ -11,8 +11,8 @@ The suite now contains the live website and control plane, server-side Discord O
 | Component | Result | Primary artifact |
 | --- | --- | --- |
 | Railway control plane | Pass | `control-plane/` |
-| Dedicated Discord bot | Pass, dormant until credentials | `discord-bot/` |
-| Website and Discord OAuth | Pass, live in fail-closed activation state | `website/` |
+| Dedicated Discord bot | Pass, active on Railway | `discord-bot/` |
+| Website and Discord OAuth | Pass, live and end-to-end verified | `website/` |
 | Branded favicon set | Pass, live | `website/public/favicon.ico` and PNG/touch icons |
 | KairuBridge | Pass | `release/KairuBridge.jar` |
 | SMPPlatform | Pass with documented feature activation boundary | `release/SMPPlatform.jar` |
@@ -35,8 +35,12 @@ The suite now contains the live website and control plane, server-side Discord O
 | Dedicated bot quality | Typecheck, ESLint, build | **Pass.** |
 | Dedicated bot tests | Vitest | **Pass:** 22 tests, 0 failures. |
 | Dedicated bot dependencies | `npm audit --omit=dev` and full `npm audit` | **Pass:** 0 vulnerabilities. |
-| Railway Discord bot | GitHub monorepo deployment and runtime-log verification | **Pass:** deployment `229752cd-68ae-4412-9537-f7a34eae5d58` succeeded; health server started and gateway reported dormant with no token. |
-| Discord setup blueprint | Static invariant tests | **Pass:** 9 categories, 28 text channels, 6 voice channels, 34 total channels, and 15 roles. |
+| Railway Discord bot | Active gateway and command registration | **Pass:** gateway ready with the real Kairu application/guild; 46 slash commands registered. |
+| Discord setup blueprint | Live reconciliation plus REST verification | **Pass:** final run Created 0, Reused 54, Updated 4, Failed 0; all 15 roles, 9 categories, 28 text channels, and 6 voice channels matched. |
+| Discord private-channel access | Managed-role overwrite verification after temporary-role removal | **Pass:** Premium Lounge and Staff Meeting retain required bot access at least privilege. |
+| Discord server profile | Public invite and REST verification | **Pass:** Kairu SMP name, description, icon, general-channel invite, and guild IDs match. |
+| Website Discord OAuth | First-time sign-up, secure logout, and returning sign-in in production | **Pass:** `identify`-only authorization, exact callback, PKCE, linked identity, secure session, revocation, and no duplicate account. |
+| Official Discord website link | Production HTML plus Discord invite API | **Pass:** all Join Discord actions target <https://discord.gg/cbBj6EvcV4>, which resolves to Kairu SMP. |
 | SMPPlatform clean build | `./gradlew clean test shadowJar` | **Pass:** shaded JAR generated. |
 | SMPPlatform tests | JUnit XML aggregation | **Pass:** 46 tests, 0 failures. |
 | SMPPlatform database | Both canonical migrations applied twice to PostgreSQL 16.15 | **Pass:** 27 distinct `smp_` tables and required guild/points/lifecycle/event/creative/audit/outbox tables. |
@@ -48,11 +52,11 @@ The suite now contains the live website and control plane, server-side Discord O
 
 SMPPlatform's single entry point composes configuration, PostgreSQL/Hikari/Flyway, async executors, cached remote world registry, Multiverse inventory validation, Floodgate identity, durable outbox, and PostgreSQL-backed guild/points commands. The JAR contains lifecycle, event/creative, admin, integration, PlaceholderAPI, and Skript modules, but their destructive or optional-plugin-dependent production adapters intentionally remain fail closed until staged against the actual Minecraft host.
 
-The dedicated Discord bot starts its HTTP health server before attempting gateway login. Without `DISCORD_TOKEN` its gateway state is `dormant` and no Discord jobs run. Streaming follows official provider limits: Twitch EventSub delivery, quota-bounded YouTube `search.list` plus `videos.list` confirmation, and no automated TikTok detection without approved official LIVE capability.
+The dedicated Discord bot starts its HTTP health server before attempting gateway login. Its production gateway is active, while removing `DISCORD_TOKEN` remains the documented fail-closed dormant mode. Streaming follows official provider limits: Twitch EventSub delivery, quota-bounded YouTube `search.list` plus `videos.list` confirmation, and no automated TikTok detection without approved official LIVE capability.
 
 ## Remaining external activation
 
-The Discord Developer Portal session was not authenticated. A user-authorized application, exact OAuth redirect URI, client secret, guild ID, bot token, privileged intent selection, and least-privilege invite are still required. After provisioning, configure the documented Railway variables, run command registration, test OAuth end to end, run `/setup-server` twice, and verify membership, account linking, event, support, suggestion, reminder, and chat-relay paths in staging.
+Discord application, server, bot, command registration, website OAuth, and public invite activation are complete. Optional Twitch and YouTube provider credentials remain gated until their owners approve the documented official provider setup and quotas.
 
 The Minecraft server itself was not started and the EULA was not accepted. Install on the intended game host, configure PostgreSQL and environment-only credentials, stage-test Java/Bedrock joins and optional plugins, and prove backup restoration before enabling lifecycle resets or administrative destructive actions.
 

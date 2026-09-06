@@ -1,10 +1,10 @@
 # Discord Developer Portal Setup
 
-**Document status:** Follow these steps to create a dedicated Kairu bot application. This guide does **not** state that a Discord application, token, or guild installation has been completed.
+**Document status:** The dedicated Kairu application, bot, server installation, command registration, and blueprint reconciliation are complete. Production uses application `1546281826341879878`, guild `1546281211876479050`, and the official invite <https://discord.gg/cbBj6EvcV4>.
 
 ## Design decision: interaction-first and least privilege
 
-Kairu should use Discord application commands and interaction payloads for operator actions. This permits a default configuration with **no privileged gateway intents**. Native slash commands do not require the bot to inspect arbitrary message content. Do not enable Presence, Server Members, or Message Content merely as a precaution; each grants access to sensitive event data and must have a documented feature necessity.
+Kairu uses Discord application commands and interaction payloads for operator actions. Native slash commands do not require the bot to inspect arbitrary message content. Production enables only **Server Members Intent** because membership and role synchronization consume guild-member events. Presence and Message Content remain disabled.
 
 | Capability | Portal / runtime setting | Default decision | Reason |
 |---|---|---|---|
@@ -12,17 +12,17 @@ Kairu should use Discord application commands and interaction payloads for opera
 | Server install | `bot` scope in the Guild Install configuration. | Enable. | The dedicated bot requires a guild identity. |
 | Standard guild metadata | `GUILDS` Gateway intent only if a Gateway client is used. | Enable only when code needs it. | Standard intent; avoids unused event subscriptions. |
 | Message Content | Privileged `MESSAGE_CONTENT` intent. | **Do not enable.** | Kairu’s command interface should not read ordinary messages. |
-| Guild Members | Privileged `GUILD_MEMBERS` intent. | **Do not enable.** | Do not cache or list all members without a documented feature requirement. |
+| Guild Members | Privileged `GUILD_MEMBERS` intent. | **Enabled.** | Required by the reviewed membership and role-synchronization runtime. |
 | Presence | Privileged `GUILD_PRESENCES` intent. | **Do not enable.** | Presence is not required for commands or Kairu API operations. |
 
 Discord requires privileged intents to be enabled in the application’s Bot settings before the app identifies with them. Apps qualifying for verification need approval for privileged access. A Gateway connection that identifies with an unauthorized privileged intent can close with code `4014`. [1]
 
 ## Portal procedure
 
-1. Open the [Discord Developer Portal](https://discord.com/developers/applications) while signed in to the organization-controlled owner account. Create a **new application** named `Kairu <Environment> Bot`, such as `Kairu Staging Bot`. Do not reuse an unrelated community bot.
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) while signed in to the organization-controlled owner account. Production uses the dedicated **Kairu SMP** application; do not reuse an unrelated community bot.
 2. On **General Information**, record the **Application ID** and **Public Key** in the approved secret/configuration system. The public key may be configuration, but treat the surrounding application record as sensitive operational data.
 3. Open **Bot**. Confirm a bot user exists. Under **Token**, select **Reset Token** only when ready to place the resulting value directly in approved secret storage. Discord shows a regenerated bot token only at creation/reset time and warns it must not be committed. [2]
-4. Under **Privileged Gateway Intents**, leave all three privileged toggles off for the baseline interaction-first bot. If a future feature proposes one, update the threat model, data-retention design, code intent mask, approval record, and this table before enabling it.
+4. Under **Privileged Gateway Intents**, enable only **Server Members Intent**. Leave Presence and Message Content off. If a future feature proposes another privileged intent, update the threat model, data-retention design, code intent mask, approval record, and this table before enabling it.
 5. Open **Installation**. Enable **Guild Install**. Enable **User Install** only if the product explicitly supports personal, command-only usage; it is not required for a dedicated guild bot. Discord distinguishes guild installs, which require an installer with `MANAGE_GUILD`, from user installs, which are command-only for the authorizing user. [2]
 6. Set the Guild Install default scopes to `bot` and `applications.commands`. Do not add OAuth scopes that the bot does not consume.
 7. Select only the bot permissions in the next table. Generate/copy the Discord-provided install link. The link contains an application ID and scopes, but it must still be reviewed before distribution.
@@ -38,17 +38,17 @@ Select permissions by feature rather than giving `Administrator`. Permissions ca
 | View Channels | Yes | N/A | Restrict visibility to Kairu channels where possible. |
 | Send Messages | Yes | N/A | Needed for ordinary command responses if the implementation posts messages. |
 | Embed Links | Yes | N/A | Needed only for rich response embeds. |
-| Attach Files | No | Reports or generated files. | Do not use for secret-bearing files. |
-| Read Message History | No | Explicit message-history feature. | Not needed for slash commands; does not bypass Message Content rules. |
-| Manage Messages | No | Moderation or cleanup feature. | Requires explicit product and guild approval. |
-| Manage Roles | No | `/setup-server` creates/updates only Kairu-managed roles. | Role hierarchy limits what the bot can manage. |
-| Manage Channels | No | `/setup-server` creates/updates only Kairu-managed channels. | Prefer existing configured channels. |
+| Attach Files | Yes | Reports or generated files. | Never use for secret-bearing files. |
+| Read Message History | Yes | Reviewed support/moderation responses. | Does not bypass Message Content rules. |
+| Manage Messages | Yes | Reviewed moderation and cleanup features. | Audit moderator actions. |
+| Manage Roles | Yes | `/setup-server` creates/updates only Kairu-managed roles. | Role hierarchy limits what the bot can manage. |
+| Manage Channels | Yes | `/setup-server` creates/updates only Kairu-managed channels. | Reconciliation is idempotent and name-normalized. |
 | Manage Webhooks | No | Bot must manage a Kairu-owned Discord webhook. | Do not use for external inbound webhook security. |
 | Administrator | **Never** | No ordinary feature. | It defeats permission minimization and should not be granted. |
 
 ## Verification and change control
 
-After installation, execute a harmless command in the test guild. Confirm that the bot cannot access a channel excluded by overwrites and cannot manage a role above its own role. Review the Developer Portal monthly and following any ownership change: application team, install contexts, redirect URLs, privileged intents, bot role permissions, and token rotation date.
+Production registered 46 guild commands and completed `/setup-server` with **Created 0, Reused 54, Updated 4, Failed 0**. Independent REST verification matched 15 roles, 9 categories, and 34 channels. Temporary Moderator and Premium recovery roles were removed; explicit managed-role overwrites preserve access to the two private voice channels. Continue to review the Developer Portal monthly and following any ownership change: application team, install contexts, redirect URLs, privileged intents, bot role permissions, and token rotation date.
 
 | Change | Required approval | Required test |
 |---|---|---|

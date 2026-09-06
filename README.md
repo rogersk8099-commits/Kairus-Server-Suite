@@ -1,6 +1,6 @@
 # Kairu SMP Complete Suite
 
-**Release integration guide · Manus AI · 6 September 2026**
+**Release integration guide · Manus AI · 7 September 2026**
 
 Kairu SMP Complete Suite is an integrated distribution for a **Paper/Purpur 1.21.4** Minecraft community with Java and Bedrock access. It combines a Node.js 22 control plane, dedicated modular Discord bot, Java 21 KairuBridge and SMPPlatform plugins, a crossplay-ready server pack, and a React/TanStack community website with Discord OAuth. The wire contract is defined in [`CONTRACT.md`](CONTRACT.md).
 
@@ -21,7 +21,7 @@ Kairu SMP Complete Suite is an integrated distribution for a **Paper/Purpur 1.21
 
 ## Live deployment
 
-The community website is live at `https://kairu-smp-website-production.up.railway.app`. The PostgreSQL-backed control-plane API is live at `https://kairu-control-plane-production.up.railway.app`. The OAuth routes and database migration are deployed; the website displays the Discord entry option in fail-closed mode until a Discord application is configured. The separate Railway `Kairu-Discord-Bot` service is deployed successfully from this repository's `/discord-bot` root; its health process is running while the gateway remains intentionally dormant until the user's Discord application, guild, and bot token are supplied. See [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
+The community website is live at <https://kairu-smp-website-production.up.railway.app>. The PostgreSQL-backed control-plane API is live at <https://kairu-control-plane-production.up.railway.app>. Discord sign-up/sign-in is active and end-to-end verified. The official Kairu SMP Discord invite is <https://discord.gg/cbBj6EvcV4>. Railway `Kairu-Discord-Bot` is gateway-ready, has 46 registered guild commands, and manages a verified 15-role, 9-category, 34-channel blueprint without Administrator permission. See [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md) and [`docs/DISCORD_LIVE_HANDOFF.md`](docs/DISCORD_LIVE_HANDOFF.md).
 
 ## Trust boundaries
 

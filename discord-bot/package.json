@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "register:commands": "tsx src/scripts/register-commands.ts",
+    "db:migrate": "prisma migrate deploy",
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate"

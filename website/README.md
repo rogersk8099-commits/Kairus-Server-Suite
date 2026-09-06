@@ -34,19 +34,19 @@ The primary account action is **Continue with Discord**. The legacy demonstratio
 
 The website keeps its session in a same-origin `__Host-kairu_session` cookie with `HttpOnly`, `Secure`, and `SameSite=Lax`. Discord provider tokens, the OAuth client secret, database credentials, API secrets, and session material never enter browser JavaScript or browser storage. The control plane owns platform users, Discord identities, OAuth states, login tickets, sessions, and revocation.
 
-Configure the website server with `API_URL`, `WEBSITE_URL`, `WEBSITE_API_SECRET`, `SESSION_SECRET`, `DISCORD_OAUTH_CLIENT_ID`, and `DISCORD_OAUTH_REDIRECT_URI`. Configure the same public identifiers and matching website/session secrets on the control plane, plus `DISCORD_OAUTH_CLIENT_SECRET`. None of these server-only variables may use a `VITE_` prefix. After both services are configured and the callback is registered, set the non-secret build flag `VITE_DISCORD_AUTH_ENABLED=true`; until then the CTA remains visible but safely disabled.
+Configure the website server with `API_URL`, `WEBSITE_URL`, `WEBSITE_API_SECRET`, `SESSION_SECRET`, `DISCORD_OAUTH_CLIENT_ID`, and `DISCORD_OAUTH_REDIRECT_URI`. Configure the same public identifiers and matching website/session secrets on the control plane, plus `DISCORD_OAUTH_CLIENT_SECRET`. None of these server-only variables may use a `VITE_` prefix. Production is configured and uses the non-secret build flag `VITE_DISCORD_AUTH_ENABLED=true`; setting it to `false` safely disables new provider starts during maintenance.
 
 The exact redirect URI is:
 
 ```text
-https://YOUR-WEBSITE-DOMAIN/auth/discord/callback
+https://kairu-smp-website-production.up.railway.app/auth/discord/callback
 ```
 
 See [`docs/DISCORD_OAUTH.md`](docs/DISCORD_OAUTH.md) for the full security model, Railway variables, migration order, and activation tests.
 
 ## Branding and Content
 
-Change `src/config/site.ts` to update the website name, server addresses, supported Minecraft version, Discord invite, social links, and global description. All major pages consume that configuration.
+Change `src/config/site.ts` to update the website name, server addresses, supported Minecraft version, Discord invite, social links, and global description. All major pages consume that configuration. Production currently links to the official Kairu SMP invite at <https://discord.gg/cbBj6EvcV4>.
 
 Visual asset URLs are centralized in `src/config/visuals.ts`. The site currently references CDN-hosted artwork so production builds stay lightweight. Typed demonstration content lives in `src/data/mock.ts`.
 

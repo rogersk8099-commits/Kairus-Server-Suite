@@ -12,8 +12,8 @@ export const site = {
   bedrockIp: "bedrock.kairusmp.gg",
   bedrockPort: "19132",
   version: "1.21.4",
-  discordUrl: "https://discord.gg/kajikairu",
-  discordName: "Kaji Kairu Discord",
+  discordUrl: "https://discord.gg/cbBj6EvcV4",
+  discordName: "Kairu SMP Discord",
   storeUrl: "/membership",
   socials: {
     tiktok: "https://tiktok.com/@kajikairu",

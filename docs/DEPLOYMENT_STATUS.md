@@ -1,6 +1,6 @@
 # Deployment Status
 
-**Kairu SMP Complete Suite · 6 September 2026**
+**Kairu SMP Complete Suite · 7 September 2026**
 
 ## Current deployment
 
@@ -9,31 +9,32 @@
 | Community website | Live, OAuth-ready | <https://kairu-smp-website-production.up.railway.app> |
 | Control-plane API | Live | <https://kairu-control-plane-production.up.railway.app> |
 | PostgreSQL | Live and private | Railway `Postgres` service |
-| Website OAuth schema/routes | Deployed, fail closed | Migration `004_website_auth.sql`; internal auth routes return `AUTH_NOT_CONFIGURED` until credentials are supplied |
-| Dedicated Discord bot | Deployed and healthy; gateway dormant | Railway `Kairu-Discord-Bot`, sourced from GitHub `/discord-bot`; `DISCORD_TOKEN` intentionally absent |
+| Website OAuth schema/routes | Live and verified | Discord `identify` authorization, PKCE, one-use state/ticket, secure session, logout, and returning sign-in passed in production |
+| Dedicated Discord bot | Live and gateway-ready | Railway `Kairu-Discord-Bot`, sourced from GitHub `/discord-bot`; 46 guild commands registered |
+| Discord community | Live | **Kairu SMP** · <https://discord.gg/cbBj6EvcV4> |
 | KairuBridge | Compiled | `release/KairuBridge.jar` and `server-pack/plugins/KairuBridge.jar` |
 | SMPPlatform | Compiled | `release/SMPPlatform.jar` and `server-pack/plugins/SMPPlatform.jar` |
 | Paper/Purpur server pack | Built | `release/Kairu-Server-Pack.zip` |
 
 The website source repository is <https://github.com/rogersk8099-commits/Kairus-Server-Website>. The complete suite repository is <https://github.com/rogersk8099-commits/Kairus-Server-Suite>. Final source synchronization is required after this release package is generated so GitHub remains the Railway source of truth.
 
-The website and control plane return HTTP 200 on their public health/content routes. The favicon and login page are live. The login page exposes **Continue with Discord** in a disabled, credential-pending state. This prevents a broken or insecure provider request before an exact Discord application callback and matching service secrets exist.
+The website and control plane return HTTP 200 on their public health/content routes. The favicon and login page are live. **Continue with Discord** is enabled and uses application `1546281826341879878`, the exact production callback, authorization code plus PKCE, and server-side Railway secrets. The website's Join Discord actions use the official permanent invite.
 
-## Activate website Discord sign-up/sign-in
+## Website Discord sign-up/sign-in
 
-The user's Discord Developer Portal was not authenticated during deployment, so no application or secret was created. After signing in, create or select one Kairu application and register exactly:
+The Kairu application has this exact redirect registered:
 
 ```text
 https://kairu-smp-website-production.up.railway.app/auth/discord/callback
 ```
 
-Configure the variables in `website/docs/DISCORD_OAUTH.md` on both Railway services. Deploy the control plane first, test callback/state/ticket/session/logout behavior in staging, then set `VITE_DISCORD_AUTH_ENABLED=true` on the website and redeploy.
+The documented variables are active in Railway. A live first-time authorization created and linked the platform identity, logout revoked the secure session, and a returning authorization resolved to the existing account without duplication.
 
-## Activate the dedicated Discord bot
+## Dedicated Discord bot
 
-The bot compiles, passes 22 tests, has zero reported npm audit vulnerabilities, and is deployed successfully on Railway. Its HTTP health service is running and reports the gateway as `dormant` while `DISCORD_TOKEN` is absent; gateway jobs, registration, role synchronization, schedules, and commands do not start.
+The bot compiles, passes 22 tests, has zero reported npm audit vulnerabilities, and is deployed successfully on Railway. Its gateway is ready, **Server Members Intent** is enabled, Presence and Message Content remain disabled, and 46 guild commands are registered.
 
-Required activation values are `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DATABASE_URL`, `API_URL`, and `API_SECRET`; `DISCORD_TOKEN` activates the gateway. The deployed client and guild IDs are explicit dormant-mode sentinels and must be replaced with the real Discord application and target guild IDs before adding a token. Enable the Discord **Server Members** privileged intent, review least-privilege invite permissions, run `npm run register:commands`, and execute `/setup-server` twice to prove idempotency before production use. Twitch notifications require official EventSub delivery through the control plane. YouTube discovery requires a restricted API key and quota review. TikTok automated LIVE detection remains disabled until approved official capability is available.
+The production application ID is `1546281826341879878` and guild ID is `1546281211876479050`. The bot is installed without Administrator permission. The final `/setup-server` result was **Created 0, Reused 54, Updated 4, Failed 0**; independent verification matched 15 roles, 9 categories, and 34 channels. Temporary recovery roles were removed after explicit managed-role access to private Premium and Staff voice channels was verified. Twitch notifications require official EventSub delivery through the control plane. YouTube discovery requires a restricted API key and quota review. TikTok automated LIVE detection remains disabled until approved official capability is available.
 
 ## Connect the Minecraft server
 

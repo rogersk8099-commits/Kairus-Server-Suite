@@ -1,6 +1,8 @@
 # Kairu Discord Bot Operator Guide
 
-**Document status:** Source consolidation and local verification are complete. The shared control-plane migrations are deployed, and the separate Railway `Kairu-Discord-Bot` service is deployed successfully from `rogersk8099-commits/Kairus-Server-Suite` at the `/discord-bot` monorepo root. Its HTTP health process is running while the Discord gateway remains intentionally dormant until a user-authorized Discord application, target guild, bot token, privileged intent selection, command registration, and staging approval are available.
+**Document status:** Source consolidation, verification, and production activation are complete. The shared control-plane migrations and bot-owned Prisma migration are deployed. Railway `Kairu-Discord-Bot` runs from `rogersk8099-commits/Kairus-Server-Suite` at `/discord-bot`; the gateway is ready on Kairu SMP, and 46 guild commands are registered.
+
+The production guild is **Kairu SMP** (`1546281211876479050`), the application ID is `1546281826341879878`, and the official invite is <https://discord.gg/cbBj6EvcV4>. The final idempotent setup pass reported **Created 0, Reused 54, Updated 4, Failed 0**. Independent verification matched 15 roles, 9 categories, and 34 channels.
 
 ## Purpose and operating model
 
@@ -16,7 +18,7 @@ The supported production topology has distinct Railway services for the central 
 | **Minecraft plugin** | Emit game events and consume only approved game actions. | Hold a Discord bot token or write directly to PostgreSQL. |
 | **Railway** | Run independent API and bot services and provide their configured environment variables. | Be treated as a substitute for backups, secret governance, or release approval. |
 
-> **Dormant activation gate:** With `DISCORD_TOKEN` absent, the process intentionally starts only the HTTP health/webhook service and reports `gateway=dormant`; it does not log in to Discord or start gateway jobs. Add a valid token only after the central API, database schema, command registration, least-privilege guild install, provider credentials, backup, monitoring, and rollback gates are complete.
+> **Dormant recovery mode:** Production is active. Removing `DISCORD_TOKEN` intentionally leaves only the HTTP health/webhook service and reports `gateway=dormant`; it does not log in to Discord or start gateway jobs. Use this fail-closed mode during credential rotation or incident containment.
 
 ## Documentation map
 
@@ -37,7 +39,7 @@ The supported production topology has distinct Railway services for the central 
 
 The production entry point constructs real `PrismaClient`, `ControlPlaneApi`, account adapters, setup repository, idempotency store, HTTP handlers, and runtime jobs. No noop command service is wired into production. The declarative `/setup-server` blueprint is guarded and tested at exactly **9 categories, 34 channels (28 text and 6 voice), and 15 roles**. The 34 display names present in the consolidated blueprint are preserved exactly.
 
-The Prisma schema is a client mapping to tables created by reviewed control-plane SQL. This repository contains no bot-owned migration directory and no startup migration command. Twitch is EventSub-led through the control plane, YouTube uses bounded `search.list` plus batched `videos.list` confirmation, and TikTok automated discovery remains disabled.
+The Prisma schema maps to reviewed Discord tables. A versioned, idempotent bot migration is retained under `prisma/migrations/`, and Railway runs `npm run db:migrate` before application start. The control plane remains the canonical owner of shared domain data. Twitch is EventSub-led through the control plane, YouTube uses bounded `search.list` plus batched `videos.list` confirmation, and TikTok automated discovery remains disabled.
 
 ## Required activation order
 
@@ -48,7 +50,7 @@ An operator should use the following sequence without skipping the gates. Each s
 3. **Configure the central API first.** Set its production-ready base URL, service authentication, PostgreSQL connection, migration job, health endpoint, backups, and audit logging. The bot must point only to this API endpoint.
 4. **Create the Discord application and bot identity.** Follow [Discord setup](DISCORD_SETUP.md); preserve the new bot token in an approved secret manager and never commit it. Discord treats that token as highly sensitive. [1]
 5. **Populate runtime variables.** Add only the variables listed in [Environment variables](ENVIRONMENT_VARIABLES.md), using actual values in the platform secret store and placeholders only in documentation or examples.
-6. **Apply reviewed control-plane SQL migrations once.** The control-plane migration job is the sole DDL authority. The bot may run `prisma format`, `prisma validate`, and `prisma generate`, but must never run `prisma migrate`, `prisma db push`, or DDL at startup.
+6. **Apply reviewed migrations.** Deploy ordered control-plane SQL first, then allow the bot's idempotent `prisma migrate deploy` pre-deploy command to reconcile its Discord persistence tables. Never run `prisma db push` in production.
 7. **Deploy API and bot as separate services.** Release the API, verify its health, then release the bot and verify its Discord readiness and API connectivity. A successful build is not an activation.
 8. **Install the bot in the test guild.** Use the generated least-privilege guild installation link with the `bot` and `applications.commands` scopes. Validate the actual permissions displayed in Discord before authorization. [1]
 9. **Run `/setup-server` once, then again.** Confirm the second run reports the same configuration and makes no duplicate channels, roles, webhooks, or records. See [Commands](COMMANDS.md).
@@ -57,7 +59,7 @@ An operator should use the following sequence without skipping the gates. Each s
 
 ## Non-negotiable operational boundaries
 
-The bot should use **native slash commands and interaction payloads** rather than reading ordinary message text. Consequently, the default design does not require Message Content, Guild Members, or Presence privileged intents. Privileged intents are only enabled after a documented feature-specific necessity review; Discord requires privileged intents to be enabled in the Developer Portal and, for qualifying verified apps, approved. [3]
+The bot uses **native slash commands and interaction payloads** rather than reading ordinary message text. Production enables only **Server Members Intent** because membership and role synchronization consume guild-member events. Message Content and Presence remain disabled. Discord requires privileged intents to be enabled in the Developer Portal and, for qualifying verified apps, approved. [3]
 
 Use official provider interfaces only. Twitch notifications use EventSub with HMAC verification. YouTube data uses YouTube Data API v3 with an API key for permitted public read calls or OAuth 2.0 for user-authorized operations. Do **not** implement TikTok scraping, undocumented endpoints, robots, or browser automation. TikTok permits automated collection only as described in its developer documentation and prohibits unauthorized collection and certain automated retrieval uses. [4] [5] [6]
 

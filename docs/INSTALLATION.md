@@ -1,6 +1,6 @@
 # Installation
 
-**Kairu SMP Complete Suite · Manus AI · 6 September 2026**
+**Kairu SMP Complete Suite · Manus AI · 7 September 2026**
 
 This procedure installs the website, control plane, dedicated Discord bot, KairuBridge, SMPPlatform, and crossplay server pack without embedding credentials in source or release archives. Paper 1.21.4 requires Java 21. Current Geyser requires Java 21 and directs older backends such as 1.21.4 to use ViaVersion.[1] [2]
 
@@ -92,9 +92,9 @@ Start in staging. Confirm the exact six worlds, Flyway success, inventory groupi
 
 ## 6. Deploy the dedicated Discord bot
 
-Deploy `discord-bot/` as a service separate from the control plane. The control plane remains the sole database migration owner. Configure only the variables in `discord-bot/ENVIRONMENT_VARIABLES.md`; do not run Prisma migration or schema-push commands from the bot. Without `DISCORD_TOKEN`, the service reports a dormant gateway and starts no Discord jobs.
+Deploy `discord-bot/` as a service separate from the control plane. Apply ordered control-plane SQL first; the bot's Railway pre-deploy step then runs the reviewed, idempotent `prisma migrate deploy` mapping for Discord-owned persistence tables. Configure only the variables in `discord-bot/ENVIRONMENT_VARIABLES.md`; never use `prisma db push` in production. Without `DISCORD_TOKEN`, the service reports a dormant gateway and starts no Discord jobs.
 
-After supplying a reviewed bot token, application ID, target guild ID, API service credential, and the Server Members privileged intent, run `npm run register:commands`. Install it with least privilege, run `/setup-server` twice, and verify the second run creates no duplicate resources.
+Production uses application `1546281826341879878` and guild `1546281211876479050`. After supplying a reviewed token, API service credential, and Server Members privileged intent, run `npm run register:commands`. Install with least privilege, run `/setup-server` until reconciliation reports no failures, then verify all managed roles, categories, channels, and private-channel bot overwrites independently. The completed Kairu deployment registered 46 commands and verified 58 managed resources.
 
 ## 7. Build and deploy the website
 
@@ -108,7 +108,7 @@ pnpm build
 
 Deploy `.output/` using a Node-compatible host and run `node .output/server/index.mjs`. The service adapter consumes the exact control-plane envelopes. Mock data is automatic when no API URL exists and may be retained for development failures, but production should set `VITE_ENABLE_MOCK_FALLBACK=false`.
 
-Register the exact Discord callback `https://<website>/auth/discord/callback`. Configure `WEBSITE_API_SECRET`, `SESSION_SECRET`, Discord client identifiers, the control-plane `DISCORD_OAUTH_CLIENT_SECRET`, and exact website/API origins only in the server secret stores. Deploy the control plane first. After an end-to-end staging sign-in and logout pass, set `VITE_DISCORD_AUTH_ENABLED=true` and redeploy the website.
+Register the exact Discord callback `https://<website>/auth/discord/callback`. Configure `WEBSITE_API_SECRET`, `SESSION_SECRET`, Discord client identifiers, the control-plane `DISCORD_OAUTH_CLIENT_SECRET`, and exact website/API origins only in the server secret stores. Deploy the control plane first. After an end-to-end staging sign-in and logout pass, set `VITE_DISCORD_AUTH_ENABLED=true` and redeploy the website. The production callback is `https://kairu-smp-website-production.up.railway.app/auth/discord/callback`, and the official server invite is <https://discord.gg/cbBj6EvcV4>.
 
 ## 8. Windows source installation helper
 

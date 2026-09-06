@@ -1,0 +1,27 @@
+name: KairuBridge
+version: ${version}
+main: com.kairu.bridge.KairuBridgePlugin
+api-version: '1.21'
+description: Secure asynchronous bridge between a Kairu Paper server and its control plane.
+author: Kairu
+softdepend:
+  - Vault
+  - LuckPerms
+  - PlaceholderAPI
+  - Geyser-Spigot
+  - floodgate
+commands:
+  kairu:
+    description: Kairu control-plane bridge commands
+    usage: /kairu <link|status|reload|sync>
+    aliases: [kb]
+permissions:
+  kairu.link:
+    description: Allows a player to complete a Discord account link.
+    default: true
+  kairu.status:
+    description: Allows a sender to inspect Kairu bridge status.
+    default: true
+  kairu.admin:
+    description: Allows bridge reloads and manual player synchronization.
+    default: op

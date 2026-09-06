@@ -1,0 +1,29 @@
+# KairuBridge configuration. Keep this file server-side; never commit a populated api-key.
+server-id: "replace-with-a-stable-server-id"
+api-base-url: "https://your-control-plane.example"
+api-key: "CHANGE_ME"
+
+# All HTTP calls run on Java HttpClient's async executor. Values are bounded to protect both services.
+http:
+  connect-timeout-seconds: 10
+  request-timeout-seconds: 15
+  max-retries: 3
+  retry-base-delay-millis: 500
+
+heartbeat:
+  enabled: true
+  interval-seconds: 30
+
+snapshots:
+  enabled: true
+  interval-seconds: 300
+  # Snapshot only players online when the periodic task executes.
+
+commands:
+  enabled: true
+  poll-interval-seconds: 15
+  # Supported remote command types: WHITELIST_ADD, WHITELIST_REMOVE, NOTIFY.
+
+# Sends a single player snapshot after a successful /kairu link. Does not change the control plane contract.
+link:
+  snapshot-after-link: true

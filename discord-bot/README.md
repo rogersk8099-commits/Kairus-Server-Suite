@@ -1,6 +1,6 @@
 # Kairu Discord Bot Operator Guide
 
-**Document status:** Source consolidation and local verification are complete. The shared control-plane migrations are deployed and a separate Railway `Kairu-Discord-Bot` service has been created with database/API references. The service remains intentionally undeployed/gateway-dormant until a user-authorized Discord application, target guild, bot token, privileged intent selection, command registration, and staging approval are available.
+**Document status:** Source consolidation and local verification are complete. The shared control-plane migrations are deployed, and the separate Railway `Kairu-Discord-Bot` service is deployed successfully from `rogersk8099-commits/Kairus-Server-Suite` at the `/discord-bot` monorepo root. Its HTTP health process is running while the Discord gateway remains intentionally dormant until a user-authorized Discord application, target guild, bot token, privileged intent selection, command registration, and staging approval are available.
 
 ## Purpose and operating model
 

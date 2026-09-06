@@ -35,6 +35,7 @@ The suite now contains the live website and control plane, server-side Discord O
 | Dedicated bot quality | Typecheck, ESLint, build | **Pass.** |
 | Dedicated bot tests | Vitest | **Pass:** 22 tests, 0 failures. |
 | Dedicated bot dependencies | `npm audit --omit=dev` and full `npm audit` | **Pass:** 0 vulnerabilities. |
+| Railway Discord bot | GitHub monorepo deployment and runtime-log verification | **Pass:** deployment `229752cd-68ae-4412-9537-f7a34eae5d58` succeeded; health server started and gateway reported dormant with no token. |
 | Discord setup blueprint | Static invariant tests | **Pass:** 9 categories, 28 text channels, 6 voice channels, 34 total channels, and 15 roles. |
 | SMPPlatform clean build | `./gradlew clean test shadowJar` | **Pass:** shaded JAR generated. |
 | SMPPlatform tests | JUnit XML aggregation | **Pass:** 46 tests, 0 failures. |

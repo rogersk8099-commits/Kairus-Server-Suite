@@ -10,7 +10,7 @@
 | Control-plane API | Live | <https://kairu-control-plane-production.up.railway.app> |
 | PostgreSQL | Live and private | Railway `Postgres` service |
 | Website OAuth schema/routes | Deployed, fail closed | Migration `004_website_auth.sql`; internal auth routes return `AUTH_NOT_CONFIGURED` until credentials are supplied |
-| Dedicated Discord bot | Built and validated | `discord-bot/`; Railway `Kairu-Discord-Bot` service created but gateway not activated |
+| Dedicated Discord bot | Deployed and healthy; gateway dormant | Railway `Kairu-Discord-Bot`, sourced from GitHub `/discord-bot`; `DISCORD_TOKEN` intentionally absent |
 | KairuBridge | Compiled | `release/KairuBridge.jar` and `server-pack/plugins/KairuBridge.jar` |
 | SMPPlatform | Compiled | `release/SMPPlatform.jar` and `server-pack/plugins/SMPPlatform.jar` |
 | Paper/Purpur server pack | Built | `release/Kairu-Server-Pack.zip` |
@@ -31,9 +31,9 @@ Configure the variables in `website/docs/DISCORD_OAUTH.md` on both Railway servi
 
 ## Activate the dedicated Discord bot
 
-The bot compiles, passes 22 tests, and has zero reported npm audit vulnerabilities. Its HTTP health service remains available when `DISCORD_TOKEN` is absent; gateway jobs, registration, role synchronization, schedules, and commands do not start.
+The bot compiles, passes 22 tests, has zero reported npm audit vulnerabilities, and is deployed successfully on Railway. Its HTTP health service is running and reports the gateway as `dormant` while `DISCORD_TOKEN` is absent; gateway jobs, registration, role synchronization, schedules, and commands do not start.
 
-Required activation values are `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DATABASE_URL`, `API_URL`, and `API_SECRET`; `DISCORD_TOKEN` activates the gateway. Enable the Discord **Server Members** privileged intent, review least-privilege invite permissions, run `npm run register:commands`, and execute `/setup-server` twice to prove idempotency before production use. Twitch notifications require official EventSub delivery through the control plane. YouTube discovery requires a restricted API key and quota review. TikTok automated LIVE detection remains disabled until approved official capability is available.
+Required activation values are `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DATABASE_URL`, `API_URL`, and `API_SECRET`; `DISCORD_TOKEN` activates the gateway. The deployed client and guild IDs are explicit dormant-mode sentinels and must be replaced with the real Discord application and target guild IDs before adding a token. Enable the Discord **Server Members** privileged intent, review least-privilege invite permissions, run `npm run register:commands`, and execute `/setup-server` twice to prove idempotency before production use. Twitch notifications require official EventSub delivery through the control plane. YouTube discovery requires a restricted API key and quota review. TikTok automated LIVE detection remains disabled until approved official capability is available.
 
 ## Connect the Minecraft server
 

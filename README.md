@@ -21,7 +21,7 @@ Kairu SMP Complete Suite is an integrated distribution for a **Paper/Purpur 1.21
 
 ## Live deployment
 
-The community website is live at `https://kairu-smp-website-production.up.railway.app`. The PostgreSQL-backed control-plane API is live at `https://kairu-control-plane-production.up.railway.app`. The OAuth routes and database migration are deployed; the website displays the Discord entry option in fail-closed mode until a Discord application is configured. A separate Railway `Kairu-Discord-Bot` service exists and is intentionally not gateway-active until the user's Discord application, guild, and bot token are supplied. See [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
+The community website is live at `https://kairu-smp-website-production.up.railway.app`. The PostgreSQL-backed control-plane API is live at `https://kairu-control-plane-production.up.railway.app`. The OAuth routes and database migration are deployed; the website displays the Discord entry option in fail-closed mode until a Discord application is configured. The separate Railway `Kairu-Discord-Bot` service is deployed successfully from this repository's `/discord-bot` root; its health process is running while the gateway remains intentionally dormant until the user's Discord application, guild, and bot token are supplied. See [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
 
 ## Trust boundaries
 

@@ -1,0 +1,37 @@
+name: Sync MineKeep-ready SMPPlatform
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/sync-minekeep-smpplatform.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify release source
+        run: |
+          set -euo pipefail
+          curl -fsSL 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663923349545/qlfOsYqkzfsuTWNL.zip' -o /tmp/kairu-suite.zip
+          echo '10a9437b80ebae1605a6a29e533d92f0608690311bfbf714b0f87cb0e128f63a  /tmp/kairu-suite.zip' | sha256sum -c -
+          rm -rf /tmp/kairu-suite
+          mkdir -p /tmp/kairu-suite
+          unzip -q /tmp/kairu-suite.zip -d /tmp/kairu-suite
+      - name: Synchronize reviewed components
+        run: |
+          set -euo pipefail
+          rm -rf smp-platform server-pack docs
+          cp -a /tmp/kairu-suite/smp-platform /tmp/kairu-suite/server-pack /tmp/kairu-suite/docs .
+          cp /tmp/kairu-suite/README.md README.md
+          rm -f .github/workflows/sync-minekeep-smpplatform.yml
+          git config user.name 'Kairu release sync'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git add -f server-pack/plugins/SMPPlatform.jar
+          git commit -m 'Deploy MineKeep-ready SMPPlatform database fix'
+          git push

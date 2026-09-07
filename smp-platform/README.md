@@ -41,14 +41,14 @@ The JAR also contains the reviewed domain modules, configuration, tests, and int
 
 The JAR includes `config.yml`, `worlds.yml`, `guilds.yml`, `points.yml`, `hardcore.yml`, `events.yml`, `events-creative.yml`, `integrations.yml`, `gui.yml`, and `messages.yml`. Review them before first production start.
 
-Secrets are environment-only:
+The database password is resolved from `SMPPLATFORM_DB_PASSWORD` first. On managed Minecraft hosts that do not export arbitrary environment variables to Paper, place only the password in `plugins/SMPPlatform/database-password.txt`. The fallback path is confined to the plugin data directory and is never logged.
 
 ```text
 SMPPLATFORM_DB_PASSWORD=<PostgreSQL password>
 SMPPLATFORM_CENTRAL_API_TOKEN=<optional central API bearer token>
 ```
 
-The JDBC URL, username, pool limits, timeouts, registry cache, world names, feature flags, and token environment-variable names are non-secret YAML configuration. Never place a real password or bearer token in YAML or source control.
+The JDBC URL, username, pool limits, timeouts, registry cache, world names, feature flags, and token environment-variable names are non-secret YAML configuration. Never place a real password or bearer token in YAML or source control. On MineKeep, configure the JDBC URL and username in `plugins/SMPPlatform/config.yml`, upload the one-line password file to `plugins/SMPPlatform/database-password.txt`, then restart the server.
 
 ## Optional integrations
 
@@ -62,7 +62,7 @@ The unified project passes **46 JUnit tests with zero failures** and produces a 
 
 1. Stop the Paper/Purpur server and take a tested backup.
 2. Copy `SMPPlatform-1.0.0.jar` to `plugins/SMPPlatform.jar`.
-3. Configure PostgreSQL and the environment-only password.
+3. Configure PostgreSQL and either the preferred environment password or the protected MineKeep-compatible password file.
 4. Install only the reviewed optional plugins needed by the enabled modules.
 5. Start in staging, inspect Flyway and integration health logs, and run `/worlds`, `/guild`, and `/points` smoke tests.
 6. Validate Java and Bedrock identity behavior, inventory groups, permission precedence, economy separation, outbox delivery, and backup restoration before production.

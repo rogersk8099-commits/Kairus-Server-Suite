@@ -35,7 +35,7 @@ The public website receives only public data and a server-validated user princip
 4. Register the exact Discord OAuth callback, provision the documented server-only variables, and activate the website flag only after an end-to-end staging sign-in.
 5. Deploy `discord-bot/`, register commands, and run the two-pass `/setup-server` idempotency check.
 6. Install the server from `server-pack/`; review and accept the Minecraft EULA yourself.
-7. Configure `KairuBridge` and `SMPPlatform` with distinct environment-only credentials and reviewed feature flags.
+7. Configure `KairuBridge` and `SMPPlatform` with distinct credentials and reviewed feature flags. SMPPlatform prefers its password environment variable; MineKeep and similar hosts may use the protected plugin-data password file documented below.
 8. Execute the staging checks in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 Windows administrators can run `Install-Kairu-Suite.ps1`; Command Prompt users can launch `install-kairu-suite.cmd`. These copy source into the clearly named `Kairu-Website`, `Kairu-Server-Pack`, and `Kairu-Control-Plane` folders. They do not create `.env`, populate keys, start services, download third-party plugins, or accept the EULA.

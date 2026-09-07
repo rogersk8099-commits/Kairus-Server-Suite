@@ -81,12 +81,14 @@ Restrict config permissions, restart the server, and run `/kairu status`. Confir
 
 ## 5. Configure SMPPlatform
 
-SMPPlatform reads database and central-API secrets from environment variables, not YAML. Review `smp-platform/README.md` and every supplied YAML file before starting production. At minimum, configure PostgreSQL and set:
+SMPPlatform prefers database and central-API secrets from environment variables, never YAML. Review `smp-platform/README.md` and every supplied YAML file before starting production. On a host that exports custom variables to Paper, set:
 
 ```text
 SMPPLATFORM_DB_PASSWORD=<private database password>
 SMPPLATFORM_CENTRAL_API_TOKEN=<private token when central sync is enabled>
 ```
+
+MineKeep does not export arbitrary `.paper.env` keys to the Paper JVM. On MineKeep, configure `storage.jdbc-url` and `storage.username` in `plugins/SMPPlatform/config.yml`, then place only the PostgreSQL password plus a final newline in `plugins/SMPPlatform/database-password.txt`. The plugin confines the fallback path to its own data directory, logs only which source was used, and continues to prefer `SMPPLATFORM_DB_PASSWORD` whenever the environment variable exists. Keep the password file out of backups shared with untrusted parties and out of source control.
 
 Start in staging. Confirm the exact six worlds, Flyway success, inventory grouping, `/worlds`, `/guild`, and `/points`. Keep lifecycle resets, event/creative automation, and destructive admin actions disabled until their actual backup, Multiverse, PlotSquared, and staff-policy adapters pass the documented staging gate.
 

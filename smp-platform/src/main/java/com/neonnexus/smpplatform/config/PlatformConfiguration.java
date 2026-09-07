@@ -1,6 +1,7 @@
 package com.neonnexus.smpplatform.config;
 
 import com.neonnexus.smpplatform.inventory.InventoryGroupPolicy;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +19,7 @@ public record PlatformConfiguration(
         Integrations integrations
 ) {
     public record Core(String serverId, Database database, CentralApi centralApi, Async async, Inventory inventory) {
-        public record Database(String jdbcUrl, String username, String passwordEnvironment, int poolSize,
+        public record Database(String jdbcUrl, String username, String passwordEnvironment, Path passwordFile, int poolSize,
                                Duration connectionTimeout, Duration validationTimeout) { }
         public record CentralApi(boolean enabled, String baseUrl, String tokenEnvironment, Duration syncInterval) { }
         public record Async(int ioThreads, Duration shutdownTimeout) { }

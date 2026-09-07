@@ -24,20 +24,26 @@ public final class DatabaseService implements AutoCloseable {
     }
 
     public void start() {
-        String password = System.getenv(config.passwordEnvironment());
-        if (password == null || password.isBlank()) {
+        DatabasePasswordResolver.Resolved secret;
+        try {
+            secret = DatabasePasswordResolver.resolve(config.passwordEnvironment(), config.passwordFile());
+        } catch (RuntimeException exception) {
             health.set(Health.UNAVAILABLE);
-            logger.severe("Database password environment variable " + config.passwordEnvironment() + " is absent; durable mutations are disabled.");
+            logger.severe("Database password could not be loaded safely; durable mutations are disabled: " + exception.getMessage());
             return;
         }
+        if (secret.source() == DatabasePasswordResolver.Source.FILE) logger.info("Database password loaded from the protected SMPPlatform data-file fallback.");
         HikariConfig pool = new HikariConfig();
-        pool.setJdbcUrl(config.jdbcUrl()); pool.setUsername(config.username()); pool.setPassword(password);
+        pool.setJdbcUrl(config.jdbcUrl()); pool.setUsername(config.username()); pool.setPassword(secret.value());
+        // Shadow relocates the JDBC driver; name it explicitly because JDBC service descriptors are not class-relocated reliably.
+        pool.setDriverClassName("com.neonnexus.smpplatform.lib.postgresql.Driver");
         pool.setMaximumPoolSize(config.poolSize()); pool.setConnectionTimeout(config.connectionTimeout().toMillis());
         pool.setValidationTimeout(config.validationTimeout().toMillis()); pool.setPoolName("SMPPlatform-PostgreSQL");
         pool.setAutoCommit(true); pool.setInitializationFailTimeout(-1);
         try {
             dataSource = new HikariDataSource(pool);
-            Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").baselineOnMigrate(true).load().migrate();
+            // Paper isolates plugin resources; scanning must use this plugin's classloader rather than the server context loader.
+            Flyway.configure(DatabaseService.class.getClassLoader()).dataSource(dataSource).locations("classpath:db/migration").baselineOnMigrate(true).load().migrate();
             try (Connection ignored = dataSource.getConnection()) { health.set(Health.HEALTHY); }
         } catch (RuntimeException | SQLException exception) {
             health.set(Health.UNAVAILABLE);

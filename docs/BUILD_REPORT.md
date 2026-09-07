@@ -15,7 +15,7 @@ The suite now contains the live website and control plane, server-side Discord O
 | Website and Discord OAuth | Pass, live and end-to-end verified | `website/` |
 | Branded favicon set | Pass, live | `website/public/favicon.ico` and PNG/touch icons |
 | KairuBridge | Pass | `release/KairuBridge.jar` |
-| SMPPlatform | Pass with documented feature activation boundary | `release/SMPPlatform.jar` |
+| SMPPlatform | Pass, live on MineKeep with durable database modules active | `release/SMPPlatform.jar` |
 | Paper/Purpur server pack | Pass | `release/Kairu-Server-Pack.zip` |
 
 ## Verification evidence
@@ -42,8 +42,10 @@ The suite now contains the live website and control plane, server-side Discord O
 | Website Discord OAuth | First-time sign-up, secure logout, and returning sign-in in production | **Pass:** `identify`-only authorization, exact callback, PKCE, linked identity, secure session, revocation, and no duplicate account. |
 | Official Discord website link | Production HTML plus Discord invite API | **Pass:** all Join Discord actions target <https://discord.gg/cbBj6EvcV4>, which resolves to Kairu SMP. |
 | SMPPlatform clean build | `./gradlew clean test shadowJar` | **Pass:** shaded JAR generated. |
-| SMPPlatform tests | JUnit XML aggregation | **Pass:** 46 tests, 0 failures. |
+| SMPPlatform tests | JUnit XML aggregation | **Pass:** 49 tests, 0 failures. |
 | SMPPlatform database | Both canonical migrations applied twice to PostgreSQL 16.15 | **Pass:** 27 distinct `smp_` tables and required guild/points/lifecycle/event/creative/audit/outbox tables. |
+| MineKeep SMPPlatform runtime | Paper startup against dedicated Railway PostgreSQL over SSL | **Pass:** protected password fallback loaded; relocated JDBC driver connected; two Flyway migrations validated; schema version 002; durable guild and points modules active. |
+| MineKeep database isolation | Dedicated `smpplatform` database and `smpplatform_app` login | **Pass:** no superuser, database creation, role creation, or replication privileges; password is absent from YAML, source, releases, and root `.paper.env`. |
 | SMPPlatform JAR inspection | `jar tf` and `javap` | **Pass:** one JavaPlugin entry, one plugin descriptor, ten YAML files, two migrations, and classes from every requested module. |
 | SMPPlatform source scan | Private-key/JDBC credential, duplicate descriptor, blocking-call scan | **Pass:** no credential material, duplicate `plugin.yml`, `Thread.sleep`, synchronous `HttpClient.send`, or production `Future.join()`. |
 | Secret boundary | Source/archive review | **Pass:** no real Discord, database, Railway, plugin, website API, or session credential is committed. |
@@ -58,7 +60,7 @@ The dedicated Discord bot starts its HTTP health server before attempting gatewa
 
 Discord application, server, bot, command registration, website OAuth, and public invite activation are complete. Optional Twitch and YouTube provider credentials remain gated until their owners approve the documented official provider setup and quotas.
 
-The Minecraft server itself was not started and the EULA was not accepted. Install on the intended game host, configure PostgreSQL and environment-only credentials, stage-test Java/Bedrock joins and optional plugins, and prove backup restoration before enabling lifecycle resets or administrative destructive actions.
+The Minecraft server is live on MineKeep and SMPPlatform database startup is verified. KairuBridge still uses placeholders, and optional crossplay/inventory integrations are not installed there yet. Stage-test Java/Bedrock joins, configure KairuBridge, and prove backup restoration before enabling lifecycle resets or administrative destructive actions.
 
 ## Release artifacts
 

@@ -33,9 +33,12 @@ public final class PlatformConfigurationLoader {
         YamlConfiguration messages = yaml("messages.yml");
         YamlConfiguration integrations = yaml("integrations.yml");
 
+        Path dataFolder = plugin.getDataFolder().toPath().toAbsolutePath().normalize();
+        Path passwordFile = dataFolder.resolve(config.getString("storage.password-file", "database-password.txt")).normalize();
+        if (!passwordFile.startsWith(dataFolder)) throw new IllegalArgumentException("storage.password-file must remain inside the SMPPlatform data folder");
         var database = new PlatformConfiguration.Core.Database(
                 environmentOr(config, "storage.jdbc-url", "SMPPLATFORM_DB_JDBC_URL"), environmentOr(config, "storage.username", "SMPPLATFORM_DB_USERNAME"),
-                "SMPPLATFORM_DB_PASSWORD", positive(config, "storage.hikari.maximum-pool-size"),
+                "SMPPLATFORM_DB_PASSWORD", passwordFile, positive(config, "storage.hikari.maximum-pool-size"),
                 millis(config, "storage.hikari.connection-timeout-ms"), millis(config, "storage.hikari.validation-timeout-ms"));
         var central = new PlatformConfiguration.Core.CentralApi(
                 integrations.getBoolean("integrations.central-api.enabled"), environmentOr(integrations, "integrations.central-api.base-url", "SMPPLATFORM_API_BASE_URL"),

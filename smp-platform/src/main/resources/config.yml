@@ -13,7 +13,8 @@ storage:
   provider: postgresql
   jdbc-url: "${SMPPLATFORM_DB_JDBC_URL}"
   username: "${SMPPLATFORM_DB_USERNAME}"
-  password: "${SMPPLATFORM_DB_PASSWORD}"
+  # Environment variable is preferred. Hosts that cannot export custom variables may use this private data-folder file.
+  password-file: "database-password.txt"
   hikari:
     maximum-pool-size: 12
     minimum-idle: 2

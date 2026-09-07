@@ -3,7 +3,7 @@
 | Scenario | Procedure | Expected result |
 |---|---|---|
 | Paper/Purpur bootstrap | Start Java 21 Paper or Purpur 1.21.4 with the JAR and no optional plugins. | Plugin enables; all nine YAML files exist; `/worlds` lists the six canonical worlds. |
-| PostgreSQL + Flyway | Set `SMPPLATFORM_DB_PASSWORD`, provision the configured PostgreSQL database, then start. | HikariCP connects and Flyway creates `players`, `minecraft_accounts`, `worlds`, `integration_state`, `event_outbox`, and `audit_logs`. |
+| PostgreSQL + Flyway | Set `SMPPLATFORM_DB_PASSWORD` or, on MineKeep, create `plugins/SMPPlatform/database-password.txt`; provision the configured PostgreSQL database, then start. | HikariCP connects, Flyway validates both migrations, schema reaches version 002, and durable modules activate. |
 | Database failure | Omit the password or stop PostgreSQL while online. | Server stays online, database reports unavailable, and durable mutations are refused rather than silently written to YAML. |
 | Central API outage | Start with a valid local registry cache then make the configured API unreachable. | Cached world definitions remain usable; registry enters offline mode and reports the failure. |
 | Central revision conflict | Return a stale revision and then different content with the current revision. | Stale revision is rejected; same-revision content is flagged as a conflict without replacing live configuration. |

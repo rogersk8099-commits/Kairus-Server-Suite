@@ -8,12 +8,12 @@
 | --- | --- | --- |
 | Community website | Live, OAuth-ready | <https://kairu-smp-website-production.up.railway.app> |
 | Control-plane API | Live | <https://kairu-control-plane-production.up.railway.app> |
-| PostgreSQL | Live and private | Railway `Postgres` service |
+| PostgreSQL | Live; SSL public TCP proxy with a dedicated least-privilege game role | Railway `Postgres` service |
 | Website OAuth schema/routes | Live and verified | Discord `identify` authorization, PKCE, one-use state/ticket, secure session, logout, and returning sign-in passed in production |
 | Dedicated Discord bot | Live and gateway-ready | Railway `Kairu-Discord-Bot`, sourced from GitHub `/discord-bot`; 46 guild commands registered |
 | Discord community | Live | **Kairu SMP** · <https://discord.gg/cbBj6EvcV4> |
 | KairuBridge | Compiled | `release/KairuBridge.jar` and `server-pack/plugins/KairuBridge.jar` |
-| SMPPlatform | Compiled | `release/SMPPlatform.jar` and `server-pack/plugins/SMPPlatform.jar` |
+| SMPPlatform | Live and database-healthy on MineKeep | `kairusmp.minekeep.gg`; release copy in `release/SMPPlatform.jar` |
 | Paper/Purpur server pack | Built | `release/Kairu-Server-Pack.zip` |
 
 The website source repository is <https://github.com/rogersk8099-commits/Kairus-Server-Website>. The complete suite repository is <https://github.com/rogersk8099-commits/Kairus-Server-Suite>. Final source synchronization is required after this release package is generated so GitHub remains the Railway source of truth.
@@ -40,7 +40,7 @@ The production application ID is `1546281826341879878` and guild ID is `15462812
 
 Install Paper or Purpur 1.21.4 with Java 21. Install the server-pack files, then review and accept the Minecraft EULA yourself. Open TCP 25565 and UDP 19132 only on the actual game host. Configure KairuBridge with the supplied production control-plane URL and plugin key.
 
-SMPPlatform targets the same Paper/Purpur server. Its single shaded JAR includes ten YAML files, two Flyway migrations, the exact six-world registry, and all module source/classes. Core, registry, identity, outbox, and PostgreSQL-backed guild/points commands are composed in the single runtime. Lifecycle, events/creative, and admin modules remain fail closed until their real backup/world/PlotSquared/staff-policy adapters pass staging; do not enable destructive workflows earlier.
+SMPPlatform is live on MineKeep server `eenrnqj27mwo8dii`. It connects over SSL using a dedicated `smpplatform_app` role, validates both Flyway migrations, reports schema version 002, and activates the durable guild and points modules. MineKeep does not export arbitrary `.paper.env` keys to Paper, so the password is stored only in `plugins/SMPPlatform/database-password.txt`; environment variables retain precedence on capable hosts. The single shaded JAR includes ten YAML files, two Flyway migrations, the exact six-world registry, and all module source/classes. Lifecycle, events/creative, and admin modules remain fail closed until their real backup/world/PlotSquared/staff-policy adapters pass staging; do not enable destructive workflows earlier.
 
 > Paper 1.21.4 remains downloadable but officially unsupported. Pin the full dependency set, prove backups and restoration, and plan an upgrade to a supported release.
 

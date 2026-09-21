@@ -1,0 +1,14 @@
+config-version: 1
+chat:
+  world: {enabled: true, default: true, command: world, aliases: [wc]}
+  global: {enabled: true, command: global, aliases: [global]}
+  guild: {enabled: true, command: guildchat, aliases: [gchat]}
+  discord-bridge: {enabled: true, discord-to-minecraft: true, minecraft-to-discord: true}
+  worlds:
+    spawn-hub: {world-chat: true, discord-bridge: false}
+    ashfall: {world-chat: true, discord-bridge: true}
+    obsidian-gate: {world-chat: true, discord-bridge: true}
+    atrium: {world-chat: true, discord-bridge: true}
+    colosseum: {world-chat: true, discord-bridge: true}
+    quarry: {world-chat: true, discord-bridge: true}
+    verdance: {world-chat: true, discord-bridge: false}

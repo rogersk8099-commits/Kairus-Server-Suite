@@ -8,6 +8,7 @@ import java.util.Optional;
  * mirror the website product specification and must not be casually renamed.
  */
 public enum NeonWorld {
+    SPAWN_HUB("spawn-hub", "Spawn Hub", "Hub", "Permanent", "Live", "Permanent", "Peaceful", "Protected central entry point with navigation and live server information."),
     ASHFALL("ashfall", "Ashfall", "Survival", "Season 7", "Live", "24k x 24k", "Hard", "Flagship survival: nations, claims and freight lines."),
     OBSIDIAN_GATE("obsidian-gate", "Obsidian Gate", "Hardcore", "Season 7", "Live", "8k x 8k", "Brutal", "One life; spectator until the reset window."),
     ATRIUM("atrium", "The Atrium", "Creative", "Permanent", "Live", "Plots 128x128", "Peaceful", "Permanent creative plots and featured builds."),

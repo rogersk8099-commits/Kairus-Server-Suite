@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class WorldRegistryTest {
     @Test void supportsKnownAndFutureWorldTypes() {
+        assertEquals("hub", WorldType.HUB.value());
         assertEquals("survival", WorldType.SURVIVAL.value());
         assertEquals("seasonal-realm", WorldType.of("seasonal-realm").value());
         assertThrows(IllegalArgumentException.class, () -> WorldType.of("A Bad Type"));

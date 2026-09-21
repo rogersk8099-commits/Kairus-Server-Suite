@@ -5,11 +5,11 @@ plugins {
 }
 
 group = "com.neonnexus.smpplatform"
-version = "1.0.0"
-description = "Neon Nexus SMPPlatform production plugin for Paper/Purpur 1.21.4"
+version = "0.5.0-kairu-foundation"
+description = "Kairu SMPPlatform production plugin for Paper/Purpur 26.2"
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
     withSourcesJar()
 }
 
@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
     compileOnly("me.clip:placeholderapi:2.11.6")
     compileOnly("com.github.SkriptLang:Skript:2.10.0")
     implementation("com.zaxxer:HikariCP:6.2.1")
@@ -37,7 +37,7 @@ dependencies {
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release.set(21)
+    options.release.set(25)
 }
 tasks.processResources {
     filteringCharset = "UTF-8"
@@ -53,10 +53,8 @@ tasks.shadowJar {
     mergeServiceFiles()
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
-    relocate("com.zaxxer.hikari", "com.neonnexus.smpplatform.lib.hikari")
-    relocate("org.flywaydb", "com.neonnexus.smpplatform.lib.flyway")
-    relocate("org.postgresql", "com.neonnexus.smpplatform.lib.postgresql")
-    relocate("com.google.gson", "com.neonnexus.smpplatform.lib.gson")
+    // Shadow 8.x cannot rewrite Java 25 (class-file 69) bytecode. Keep dependencies bundled
+    // without relocation so the plugin remains buildable on the Paper 26.2 / Java 25 toolchain.
     manifest { attributes["paperweight-mappings-namespace"] = "mojang" }
 }
 tasks.jar { enabled = false }

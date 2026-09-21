@@ -4,9 +4,42 @@ registry:
   revision: 1
   source: "LOCAL_BOOTSTRAP"
   synced-at: null
-  exact-world-ids: [ashfall, obsidian-gate, atrium, colosseum, quarry, verdance]
+  exact-world-ids: [spawn-hub, ashfall, obsidian-gate, atrium, colosseum, quarry, verdance]
   future-world-types-allowed: true
 worlds:
+  spawn-hub:
+    id: spawn-hub
+    minecraft-world-name: spawn-hub
+    display-name: "Spawn Hub"
+    public-type: "Hub"
+    module-type: HUB
+    season: "Permanent"
+    status: LIVE
+    description: "The protected central Kairu SMP entry point with world navigation, help and live server information."
+    size: "Permanent"
+    difficulty: PEACEFUL
+    border-size: 0
+    environment: NORMAL
+    game-mode: ADVENTURE
+    pvp-mode: DISABLED
+    guilds: DISABLED
+    points-enabled: false
+    currency-id: HUB_POINTS
+    claims-enabled: false
+    economy-enabled: false
+    inventory-group: HUB_GROUP
+    reset-policy: {mode: NEVER, schedule: null}
+    archive-policy: {mode: BACKUP_ONLY, read-only-after-archive: false}
+    access-permission: smpplatform.world.spawn-hub
+    spawn: {x: 0.5, y: 80.0, z: 0.5, yaw: 0.0, pitch: 0.0}
+    website-visible: true
+    map-visible: true
+    discord-enabled: true
+    discord-category-enabled: false
+    chat-bridge-enabled: false
+    world-chat-enabled: true
+    global-chat-enabled: true
+    maintenance-mode: false
   ashfall:
     id: ashfall
     minecraft-world-name: nx_ashfall

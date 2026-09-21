@@ -55,7 +55,9 @@ public final class PlatformConfigurationLoader {
         }
         var worldFile = new PlatformConfiguration.WorldFile("world-registry-cache.json", 1L, Map.copyOf(overrides));
         var guildConfig = new PlatformConfiguration.Guilds(guilds.getBoolean("guilds.enabled", true), stringMap(requireSection(guilds, "guilds.world-policy")));
-        var pointsConfig = new PlatformConfiguration.Points(points.getBoolean("points.enabled", true), new ArrayList<>(requireSection(points, "points.currencies").getKeys(false)));
+        var firstJoin = new PlatformConfiguration.Points.AutomaticReward(points.getBoolean("points.automatic-rewards.first-join.enabled", false), points.getString("points.automatic-rewards.first-join.currency", "NEXUS_POINTS"), points.getLong("points.automatic-rewards.first-join.amount", 0L), points.getString("points.automatic-rewards.first-join.reason", "First Kairu SMP join"), points.getStringList("points.automatic-rewards.first-join.worlds"));
+        if (firstJoin.enabled() && firstJoin.amount() <= 0) throw new IllegalArgumentException("points.automatic-rewards.first-join.amount must be positive when enabled");
+        var pointsConfig = new PlatformConfiguration.Points(points.getBoolean("points.enabled", true), new ArrayList<>(requireSection(points, "points.currencies").getKeys(false)), firstJoin);
         var hardConfig = new PlatformConfiguration.Hardcore(hardcore.getBoolean("hardcore.enabled", true), required(hardcore, "hardcore.world-id"),
                 new PlatformConfiguration.Hardcore.ResetWindow(hardcore.getBoolean("hardcore.reset.enabled", true), required(hardcore, "hardcore.reset.day"), required(hardcore, "hardcore.reset.time"), required(hardcore, "hardcore.reset.timezone")));
         var eventConfig = new PlatformConfiguration.Events(events.getBoolean("events.enabled", true), required(events, "events.world-id"), events.getInt("events.event-types.GAUNTLET.max-players", 64), new ArrayList<>(requireSection(events, "events.event-types").getKeys(false)));

@@ -15,4 +15,6 @@ public interface PointsRepository {
     Optional<PointAccount> findAccount(AccountKey key);
     List<PointTransaction> history(AccountKey key, int limit, Instant beforeExclusive);
     List<LeaderboardEntry> leaderboard(String currencyId, OwnerType ownerType, int limit);
+    /** Atomically reserves a configured automatic-reward key before its ledger mutation. */
+    boolean claimAutomaticReward(String rewardKey, UUID playerId, Instant claimedAt);
 }

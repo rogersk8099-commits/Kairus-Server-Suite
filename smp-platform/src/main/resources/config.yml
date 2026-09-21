@@ -1,10 +1,10 @@
-# SMPPlatform example configuration — intended for Paper/Purpur 1.21.4 and Java 21.
+# SMPPlatform example configuration — intended for Paper/Purpur 26.2 and Java 25.
 # Resolve all sensitive values from the runtime environment or a secret manager. Never commit real secrets.
 config-version: 1
 server:
-  network-name: "Neon Nexus"
-  minecraft-target: "1.21.4"
-  java-target: 21
+  network-name: "Kairu SMP"
+  minecraft-target: "26.2"
+  java-target: 25
   server-side-only: true
   locale: "en_GB"
   timezone: "UTC"

@@ -10,6 +10,7 @@ import java.util.Optional;
  * World Registry instead of being duplicated here.
  */
 public enum NeonWorld {
+    SPAWN_HUB("spawn-hub", "Spawn Hub", WorldKind.HUB),
     ASHFALL("ashfall", "Ashfall", WorldKind.SURVIVAL),
     OBSIDIAN_GATE("obsidian-gate", "Obsidian Gate", WorldKind.HARDCORE),
     ATRIUM("atrium", "The Atrium", WorldKind.CREATIVE),
@@ -37,5 +38,5 @@ public enum NeonWorld {
         return Arrays.stream(values()).filter(world -> world.id.equals(normalized)).findFirst();
     }
 
-    public enum WorldKind { SURVIVAL, HARDCORE, CREATIVE, EVENT, RESOURCE, ARCHIVE }
+    public enum WorldKind { HUB, SURVIVAL, HARDCORE, CREATIVE, EVENT, RESOURCE, ARCHIVE }
 }

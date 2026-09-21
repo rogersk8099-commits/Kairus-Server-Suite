@@ -8,6 +8,7 @@ import java.util.Objects;
  * while a future platform type can be represented without changing this class.
  */
 public record WorldType(String value) {
+    public static final WorldType HUB = known("hub");
     public static final WorldType SURVIVAL = known("survival");
     public static final WorldType HARDCORE = known("hardcore");
     public static final WorldType CREATIVE = known("creative");

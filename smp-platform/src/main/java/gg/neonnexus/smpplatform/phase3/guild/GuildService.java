@@ -196,6 +196,8 @@ public final class GuildService {
     }
 
     public Guild info(String nameOrTag) { return transactions.required(() -> requireGuild(repository.findByNameOrTag(nameOrTag))); }
+    /** Read-only lookup used by the optional client gateway; run this on the database executor. */
+    public java.util.Optional<Guild> byPlayer(UUID playerId) { return transactions.required(() -> repository.findByPlayer(playerId)); }
     public List<GuildMember> members(String nameOrTag) { return info(nameOrTag).members(); }
     public List<Guild> top(int limit) { return transactions.required(() -> repository.topByPoints(validLimit(limit))); }
 

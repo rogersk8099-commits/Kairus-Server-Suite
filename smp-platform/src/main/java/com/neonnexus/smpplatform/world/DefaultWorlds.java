@@ -9,7 +9,7 @@ import java.util.List;
 /** The only built-in defaults. IDs and display names intentionally mirror neon-nexus-hub. */
 public final class DefaultWorlds {
     public static final List<String> REQUIRED_IDS = List.of(
-            "ashfall", "obsidian-gate", "atrium", "colosseum", "quarry", "verdance");
+            "spawn-hub", "ashfall", "obsidian-gate", "atrium", "colosseum", "quarry", "verdance");
 
     private DefaultWorlds() { }
 
@@ -19,6 +19,12 @@ public final class DefaultWorlds {
 
     public static List<WorldDefinition> definitions() {
         return List.of(
+                world("spawn-hub", "spawn-hub", "Spawn Hub",
+                        "The permanent Kairu SMP entry point, with world navigation, player help, announcements and account linking.",
+                        WorldType.HUB, "Permanent", WorldStatus.LIVE, "Peaceful", 0,
+                        PvpMode.DISABLED, false, false, "HUB_POINTS", false, false, "HUB_GROUP",
+                        new ResetPolicy.None(), ArchivePolicy.none(), true, true, true,
+                        "smpplatform.world.spawn-hub"),
                 world("ashfall", "ashfall", "Ashfall",
                         "The flagship survival map. Nation borders, claim wars and a fully player-run economy running on redstone freight lines.",
                         WorldType.SURVIVAL, "Season 7", WorldStatus.LIVE, "Hard", 24_000,

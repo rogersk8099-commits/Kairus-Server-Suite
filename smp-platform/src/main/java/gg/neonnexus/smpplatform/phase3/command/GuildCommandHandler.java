@@ -29,7 +29,7 @@ public final class GuildCommandHandler {
     private CommandReply leave(Actor a){Guild g=guilds.leave(a);return CommandReply.ok("Left "+g.name());}
     private CommandReply kick(Actor a,String[] x){Guild g=guilds.kick(a,target(x,1,"Usage: /guild kick <player>"));return CommandReply.ok("Member removed from "+g.name());}
     private CommandReply rank(Actor a,String[] x,boolean up){Guild g=up?guilds.promote(a,target(x,1,"Usage: /guild promote <player>")):guilds.demote(a,target(x,1,"Usage: /guild demote <player>"));return CommandReply.ok(up?"Member promoted in "+g.name():"Member demoted in "+g.name());}
-    private CommandReply transfer(Actor a,String[] x){Guild g=guilds.transferOwnership(a,target(x,1,"Usage: /guild transfer <player>"));return CommandReply.ok("Ownership transferred to "+g.member(g.ownerId()).playerId());}
+    private CommandReply transfer(Actor a,String[] x){if(x.length<3||!x[2].equalsIgnoreCase("confirm"))return CommandReply.error("Confirmation required: /guild transfer <player> confirm");Guild g=guilds.transferOwnership(a,target(x,1,"Usage: /guild transfer <player> confirm"));return CommandReply.ok("Ownership transferred to "+g.member(g.ownerId()).playerId());}
     private CommandReply edit(Actor a,String[] x){if(x.length<3)return CommandReply.error("Usage: /guild edit <tag> <description>");Guild g=guilds.edit(a,join(x,2),x[1]);return CommandReply.ok("Updated "+g.name());}
     private CommandReply disband(Actor a){guilds.disband(a);return CommandReply.ok("Guild disbanded");}
     private CommandReply info(String[] x){Guild g=guilds.info(x.length>1?x[1]:throwUsage("Usage: /guild info <name|tag>"));return CommandReply.gui("guild.info",""+g.name()+" ["+g.tag()+"] — "+g.members().size()+" members");}

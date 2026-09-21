@@ -27,6 +27,18 @@ public final class PointsService {
         return transactions.required(() -> repository.findAccount(new AccountKey(OwnerType.PLAYER, playerId, currencyId)).map(PointAccount::balance).orElse(0L));
     }
     public PointTransaction award(Actor actor, UUID playerId, String currencyId, long amount, Source source, String reason, Map<String, String> metadata) { require(amount > 0, Phase3Exception.Code.INVALID_ARGUMENT, "amount must be positive"); return mutate(actor, new AccountKey(OwnerType.PLAYER, playerId, currencyId), amount, source, reason, metadata, false); }
+    /** Awards a configured source once per player, using a durable idempotency reservation. */
+    public java.util.Optional<PointTransaction> awardOnce(Actor actor, UUID playerId, String rewardKey, String currencyId, long amount, Source source, String reason, Map<String, String> metadata) {
+        require(amount > 0, Phase3Exception.Code.INVALID_ARGUMENT, "amount must be positive");
+        AccountKey key = new AccountKey(OwnerType.PLAYER, playerId, currencyId);
+        require(policy.permitsCurrency(actor.world(), key.currencyId()), Phase3Exception.Code.POLICY_DENIED, key.currencyId()+" is unavailable in "+actor.world().displayName());
+        PointTransaction transaction = transactions.required(() -> {
+            if (!repository.claimAutomaticReward(rewardKey, playerId, clock.instant())) return null;
+            return repository.applyAtomically(new BalanceChange(key, amount, source, reason, metadata, actor.world(), actor.playerId(), UUID.randomUUID()), allowNegativeBalances, clock.instant());
+        });
+        if (transaction != null) events.pointsChanged(transaction);
+        return java.util.Optional.ofNullable(transaction);
+    }
     public PointTransaction remove(Actor actor, UUID playerId, String currencyId, long amount, String reason, Map<String, String> metadata) { requireAdmin(actor); require(amount > 0, Phase3Exception.Code.INVALID_ARGUMENT, "amount must be positive"); return mutate(actor, new AccountKey(OwnerType.PLAYER, playerId, currencyId), -amount, Source.ADMIN, reason, metadata, true); }
     public PointTransaction add(Actor actor, UUID playerId, String currencyId, long amount, String reason, Map<String, String> metadata) { requireAdmin(actor); return award(actor, playerId, currencyId, amount, Source.ADMIN, reason, metadata); }
     public PointTransaction set(Actor actor, UUID playerId, String currencyId, long targetBalance, String reason, Map<String, String> metadata) {

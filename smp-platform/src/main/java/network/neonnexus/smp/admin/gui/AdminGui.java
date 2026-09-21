@@ -130,7 +130,7 @@ public final class AdminGui implements Listener {
         summary(screen, 14, Material.BEEHIVE, "GUILD", "Platform identity", "Provided by Guild module");
         summary(screen, 15, Material.NETHER_STAR, "EVENT HISTORY", "Provided by Events module", "No phase-2 mutation here");
         summary(screen, 16, Material.AMETHYST_SHARD, "MEMBERSHIP", "Central-platform source", "Read-only in phase 2");
-        summary(screen, 19, Material.CHAIN, "ACCOUNT LINKS", "UUID-based identity", "Edition: " + target.edition());
+        summary(screen, 19, Material.NAME_TAG, "ACCOUNT LINKS", "UUID-based identity", "Edition: " + target.edition());
         summary(screen, 21, Material.IRON_BARS, "MODERATION HISTORY", "Recent warnings, mutes, and bans", "See audit history for phase-2 records");
         button(screen, 20, NeonItems.item(Material.WRITABLE_BOOK, NeonItems.MAGENTA + "<bold>AUDIT HISTORY", NeonItems.MUTED + "Recent actions for this player", NeonItems.BLUE + "Click to open"), event -> renderTargetAudit(player, target.uuid(), true));
         button(screen, 22, NeonItems.item(Material.ENDER_CHEST, NeonItems.PURPLE + "<bold>INVENTORY", NeonItems.MUTED + "View / edit / clear", NeonItems.BLUE + "Click to open actions"), event -> renderActionSection(player, targetId, "Inventory", true));
@@ -215,7 +215,7 @@ public final class AdminGui implements Listener {
         navigation(screen, player); open(player, screen);
     }
     private ItemStack worldItem(NeonWorld world) {
-        Material material = switch (world) { case ASHFALL -> Material.MAGMA_BLOCK; case OBSIDIAN_GATE -> Material.CRYING_OBSIDIAN; case ATRIUM -> Material.QUARTZ_BLOCK; case COLOSSEUM -> Material.DIAMOND_SWORD; case QUARRY -> Material.IRON_PICKAXE; case VERDANCE -> Material.MOSS_BLOCK; };
+        Material material = switch (world) { case SPAWN_HUB -> Material.RECOVERY_COMPASS; case ASHFALL -> Material.MAGMA_BLOCK; case OBSIDIAN_GATE -> Material.CRYING_OBSIDIAN; case ATRIUM -> Material.QUARTZ_BLOCK; case COLOSSEUM -> Material.DIAMOND_SWORD; case QUARRY -> Material.IRON_PICKAXE; case VERDANCE -> Material.MOSS_BLOCK; };
         org.bukkit.World runtime = Bukkit.getWorld(world.id()); int players = runtime == null ? 0 : runtime.getPlayers().size();
         String status = runtime == null ? NeonItems.WARN + "Not loaded" : NeonItems.SUCCESS + "Loaded";
         return NeonItems.item(material, NeonItems.MAGENTA + "<bold>" + world.displayName(), NeonItems.BLUE + world.type() + " · " + world.season(), NeonItems.MUTED + "Status: <white>" + world.status() + " · " + status, NeonItems.MUTED + "Players: <white>" + players + "  Difficulty: <white>" + world.difficulty(), NeonItems.MUTED + "Border: <white>" + (runtime == null ? "—" : String.format("%.0f", runtime.getWorldBorder().getSize())), NeonItems.BLUE + "Click for runtime detail");

@@ -1,6 +1,8 @@
 package com.neonnexus.smpplatform;
 
 import com.neonnexus.smpplatform.async.PlatformExecutors;
+import com.neonnexus.smpplatform.atrium.AtriumPlotFlagsMenu;
+import com.neonnexus.smpplatform.client.KairuClientGateway;
 import com.neonnexus.smpplatform.config.PlatformConfiguration;
 import com.neonnexus.smpplatform.config.PlatformConfigurationLoader;
 import com.neonnexus.smpplatform.database.DatabaseService;
@@ -21,12 +23,16 @@ import com.neonnexus.smpplatform.world.WorldRegistrySynchronizer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.entity.Player;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.UUID;
+import com.google.gson.JsonObject;
 
 /** Unified SMPPlatform bootstrap. Durable feature services activate only after PostgreSQL is healthy. */
 public final class SMPPlatform extends JavaPlugin {
@@ -38,6 +44,7 @@ public final class SMPPlatform extends JavaPlugin {
     private OutboxDispatcher outbox;
     private MultiverseWorldAdapter multiverse;
     private volatile Phase3Runtime phase3;
+    private KairuClientGateway clientGateway;
 
     @Override public void onEnable() {
         try {
@@ -48,6 +55,7 @@ public final class SMPPlatform extends JavaPlugin {
             registry.bootstrapFromCache();
             configuration.core().inventory().policy().groupsFor(registry.snapshot().worlds().values());
             multiverse = new MultiverseWorldAdapter(getServer().getPluginManager(), getLogger());
+            clientGateway = new KairuClientGateway(this);
             MultiverseInventoryAdapter inventories = new MultiverseInventoryAdapter(getServer().getPluginManager(), getLogger());
             inventories.validateDesiredGroups(registry.snapshot().worlds().values(), configuration.core().inventory().policy());
             FloodgateIdentityAdapter identities = FloodgateIdentityAdapter.discover(getServer().getPluginManager(), getLogger());
@@ -65,7 +73,7 @@ public final class SMPPlatform extends JavaPlugin {
     private void startDatabaseServicesAsync() {
         database.start();
         if (!database.isAvailable()) return;
-        phase3 = Phase3Runtime.start(this, database.requireDataSource(), executors.io(), Clock.systemUTC());
+        phase3 = Phase3Runtime.start(this, database.requireDataSource(), executors.io(), Clock.systemUTC(), configuration.points().firstJoinReward());
         getLogger().info("Durable guild and points modules are active.");
         if (configuration.core().centralApi().enabled() && configuration.integrations().outbox().enabled()) {
             String token = System.getenv(configuration.core().centralApi().tokenEnvironment());
@@ -106,6 +114,7 @@ public final class SMPPlatform extends JavaPlugin {
 
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String name = command.getName().toLowerCase(java.util.Locale.ROOT);
+        if (name.equals("kairuadmin")) return clientGateway != null && clientGateway.handle(sender, args);
         if (name.equals("worlds")) {
             if (registry == null) { sender.sendMessage("SMPPlatform World Registry is not available."); return true; }
             var snapshot = registry.snapshot();
@@ -121,10 +130,31 @@ public final class SMPPlatform extends JavaPlugin {
             }
             return runtime.execute(sender, name, args);
         }
+        if (name.equals("plotflags")) {
+            if (!(sender instanceof org.bukkit.entity.Player player)) { sender.sendMessage("Open plot settings in-game."); return true; }
+            if (!player.getWorld().getName().equalsIgnoreCase("atrium")) { player.sendMessage("§cThe Atrium plot settings guide is available only in The Atrium."); return true; }
+            AtriumPlotFlagsMenu.open(player);
+            return true;
+        }
         sender.sendMessage("§cThis SMPPlatform module is not active because its required production adapter is unavailable.");
         return true;
     }
 
     public WorldRegistry worldRegistry() { return registry; }
     public MultiverseWorldAdapter multiverse() { return multiverse; }
+    public void clientView(Player player, String view, Consumer<JsonObject> callback) {
+        Phase3Runtime runtime = phase3;
+        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds and points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
+        runtime.clientView(player, view, callback);
+    }
+    public void clientGuildAction(Player player, String action, UUID targetId, Consumer<JsonObject> callback) {
+        Phase3Runtime runtime = phase3;
+        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
+        runtime.clientGuildAction(player, action, targetId, callback);
+    }
+    public void clientPointsView(Player player, String view, String currency, Consumer<JsonObject> callback) {
+        Phase3Runtime runtime = phase3;
+        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
+        runtime.clientPointsView(player, view, currency, callback);
+    }
 }

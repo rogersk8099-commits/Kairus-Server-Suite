@@ -24,4 +24,5 @@ integrations:
     enabled: true
     mode: "CENTRAL_API_EVENT_BUS_ONLY"
     bot-token-in-plugin: false
-    world-chat-bridges: {ashfall: true, obsidian-gate: true, atrium: true, colosseum: true, quarry: true, verdance: false}
+    # Channel IDs and purposes belong in the Control Plane database; never hard-code them here.
+    world-chat-bridges: {spawn-hub: false, ashfall: true, obsidian-gate: true, atrium: true, colosseum: true, quarry: true, verdance: false}

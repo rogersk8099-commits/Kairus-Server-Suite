@@ -9,4 +9,4 @@ gui:
   confirmations: {enabled: true, timeout-seconds: 30, require-typed-confirmation-for: [world-reset, points-set, guild-disband, player-ban]}
   admin-home: {permission: smpplatform.admin, categories: [players, worlds, guilds, points, hardcore, events, creative, quarry, moderation, announcements, monitor, integrations, settings]}
   player-selector: {tabs: [ONLINE, RECENT, OFFLINE, BEDROCK, JAVA, STAFF], search-enabled: true, player-heads: true, show: [username, platform, world, guild, rank, playtime, online-status]}
-  world-cards: {exact-world-order: [ashfall, obsidian-gate, atrium, colosseum, quarry, verdance], fields: [status, type, season, players, difficulty, tps, mspt, border, next-reset, guild-status, points-status]}
+  world-cards: {exact-world-order: [spawn-hub, ashfall, obsidian-gate, atrium, colosseum, quarry, verdance], fields: [status, type, season, players, difficulty, tps, mspt, border, next-reset, guild-status, points-status]}

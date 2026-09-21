@@ -6,6 +6,7 @@ import java.util.Optional;
 
 /** The immutable public world vocabulary shared by Minecraft, the platform API, and Discord. */
 public enum NexusWorld {
+    SPAWN_HUB("spawn-hub", "Spawn Hub", "HUB", "Permanent", "Live"),
     ASHFALL("ashfall", "Ashfall", "SURVIVAL", "Season 7", "Live"),
     OBSIDIAN_GATE("obsidian-gate", "Obsidian Gate", "HARDCORE", "Season 7", "Live"),
     ATRIUM("atrium", "The Atrium", "CREATIVE", "Permanent", "Live"),

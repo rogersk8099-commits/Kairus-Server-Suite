@@ -1,9 +1,12 @@
 package com.neonnexus.smpplatform;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.neonnexus.smpplatform.outbox.JdbcOutboxRepository;
 import com.neonnexus.smpplatform.outbox.OutboxEvent;
 import com.neonnexus.smpplatform.outbox.OutboxRepository;
+import com.neonnexus.smpplatform.config.PlatformConfiguration;
 import gg.neonnexus.smpplatform.phase3.command.CommandReply;
 import gg.neonnexus.smpplatform.phase3.command.GuildCommandHandler;
 import gg.neonnexus.smpplatform.phase3.command.PlayerDirectory;
@@ -41,6 +44,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -60,17 +64,26 @@ final class Phase3Runtime implements Listener {
     private final Executor io;
     private final GuildCommandHandler guilds;
     private final PointsCommandHandler points;
+    private final GuildService guildService;
+    private final PointsService pointsService;
     private final Map<String, UUID> playersByName = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingGuildTransfer> pendingGuildTransfers = new ConcurrentHashMap<>();
+    private final PlatformConfiguration.Points.AutomaticReward firstJoinReward;
+    private static final Duration GUILD_TRANSFER_CONFIRMATION_TTL = Duration.ofSeconds(30);
+    private record PendingGuildTransfer(UUID successorId, Instant expiresAt) { }
 
     private Phase3Runtime(JavaPlugin plugin, Executor io, GuildCommandHandler guilds,
-                          PointsCommandHandler points) {
+                          PointsCommandHandler points, GuildService guildService, PointsService pointsService, PlatformConfiguration.Points.AutomaticReward firstJoinReward) {
         this.plugin = plugin;
         this.io = io;
         this.guilds = guilds;
         this.points = points;
+        this.guildService = guildService;
+        this.pointsService = pointsService;
+        this.firstJoinReward = firstJoinReward;
     }
 
-    static Phase3Runtime start(JavaPlugin plugin, DataSource dataSource, Executor io, Clock clock) {
+    static Phase3Runtime start(JavaPlugin plugin, DataSource dataSource, Executor io, Clock clock, PlatformConfiguration.Points.AutomaticReward firstJoinReward) {
         JdbcTransactionRunner transactions = new JdbcTransactionRunner(dataSource);
         OutboxRepository outbox = new JdbcOutboxRepository(dataSource);
         Phase3EventPublisher publisher = new DurablePublisher(outbox, clock);
@@ -85,7 +98,7 @@ final class Phase3Runtime implements Listener {
                 false);
         Phase3Runtime runtime = new Phase3Runtime(plugin, io,
                 new GuildCommandHandler(guildService, directory),
-                new PointsCommandHandler(pointsService, directory));
+                new PointsCommandHandler(pointsService, directory), guildService, pointsService, firstJoinReward);
         CachedPlayerDirectory.owner = runtime.playersByName;
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
@@ -123,9 +136,139 @@ final class Phase3Runtime implements Listener {
         return true;
     }
 
+    /** Fetches only the caller's read-only dashboard data without blocking Paper's primary thread. */
+    void clientView(Player player, String view, Consumer<JsonObject> callback) {
+        cache(player.getName(), player.getUniqueId());
+        Actor actor = actor(player);
+        io.execute(() -> {
+            JsonObject result = new JsonObject();
+            try {
+                if (view.equals("guild-summary")) guildSummary(actor, result);
+                else if (view.equals("guild-top")) guildTop(result);
+                else if (view.equals("points-summary")) pointsSummary(actor, result);
+                else throw new IllegalArgumentException("Unknown client view.");
+            } catch (RuntimeException exception) { result.addProperty("error", "Persistent data is currently unavailable."); }
+            callback.accept(result);
+        });
+    }
+
+    /** Reads a caller's ledger or a public player leaderboard without blocking the Paper thread. */
+    void clientPointsView(Player player, String view, String currency, Consumer<JsonObject> callback) {
+        cache(player.getName(), player.getUniqueId());
+        Actor actor = actor(player);
+        io.execute(() -> {
+            JsonObject result = new JsonObject();
+            try {
+                String currencyId = gg.neonnexus.smpplatform.phase3.points.PointsDomain.requireCurrency(currency);
+                result.addProperty("currency", currencyId);
+                if (view.equals("points-history")) {
+                    JsonArray history = new JsonArray();
+                    for (PointTransaction transaction : pointsService.history(actor, actor.playerId(), currencyId, 20, null)) {
+                        JsonObject row = new JsonObject();
+                        row.addProperty("amount", transaction.amount()); row.addProperty("balance", transaction.balanceAfter());
+                        row.addProperty("source", transaction.source().name()); row.addProperty("reason", transaction.reason());
+                        row.addProperty("occurredAt", transaction.occurredAt().toString()); history.add(row);
+                    }
+                    result.add("history", history);
+                } else if (view.equals("points-top")) {
+                    JsonArray leaderboard = new JsonArray();
+                    for (var entry : pointsService.top(currencyId, gg.neonnexus.smpplatform.phase3.points.PointsDomain.OwnerType.PLAYER, 20)) {
+                        JsonObject row = new JsonObject(); row.addProperty("rank", entry.rank()); row.addProperty("playerId", entry.account().ownerId().toString()); row.addProperty("balance", entry.balance()); leaderboard.add(row);
+                    }
+                    result.add("leaderboard", leaderboard);
+                } else throw new IllegalArgumentException("Unknown points view.");
+            } catch (RuntimeException exception) { result.addProperty("error", safeMessage(exception)); }
+            callback.accept(result);
+        });
+    }
+
+    /** Performs one guild action on the database executor, then returns a fresh caller summary. */
+    void clientGuildAction(Player player, String action, UUID targetId, Consumer<JsonObject> callback) {
+        cache(player.getName(), player.getUniqueId());
+        Actor actor = actor(player);
+        io.execute(() -> {
+            JsonObject result = new JsonObject();
+            try {
+                switch (action) {
+                    case "guild-invite" -> guildService.invite(actor, requireTarget(targetId));
+                    case "guild-kick" -> guildService.kick(actor, requireTarget(targetId));
+                    case "guild-promote" -> guildService.promote(actor, requireTarget(targetId));
+                    case "guild-demote" -> guildService.demote(actor, requireTarget(targetId));
+                    case "guild-leave" -> guildService.leave(actor);
+                    case "guild-transfer-arm" -> armGuildTransfer(actor, requireTarget(targetId));
+                    case "guild-transfer-confirm" -> confirmGuildTransfer(actor, requireTarget(targetId));
+                    default -> throw new IllegalArgumentException("Unknown guild action.");
+                }
+                guildSummary(actor, result);
+                result.addProperty("message", action.equals("guild-transfer-arm") ? "Ownership transfer is armed. Confirm within 30 seconds." : "Guild updated.");
+            } catch (RuntimeException exception) {
+                result.addProperty("error", safeMessage(exception));
+            }
+            callback.accept(result);
+        });
+    }
+
+    private static UUID requireTarget(UUID targetId) {
+        if (targetId == null) throw new IllegalArgumentException("Select a guild member.");
+        return targetId;
+    }
+
+    private void armGuildTransfer(Actor actor, UUID successorId) {
+        pendingGuildTransfers.put(actor.playerId(), new PendingGuildTransfer(successorId, Instant.now().plus(GUILD_TRANSFER_CONFIRMATION_TTL)));
+    }
+
+    private void confirmGuildTransfer(Actor actor, UUID successorId) {
+        PendingGuildTransfer pending = pendingGuildTransfers.remove(actor.playerId());
+        if (pending == null || pending.expiresAt().isBefore(Instant.now()) || !pending.successorId().equals(successorId)) {
+            throw new IllegalArgumentException("Ownership transfer confirmation has expired. Start again.");
+        }
+        guildService.transferOwnership(actor, successorId);
+    }
+
+    private static String safeMessage(RuntimeException exception) {
+        String message = exception.getMessage();
+        return message == null || message.isBlank() ? "Guild action could not be completed." : message;
+    }
+
+    private void guildSummary(Actor actor, JsonObject result) {
+        Guild guild = guildService.byPlayer(actor.playerId()).orElse(null);
+        result.addProperty("inGuild", guild != null);
+        if (guild == null) return;
+        result.addProperty("name", guild.name()); result.addProperty("tag", guild.tag()); result.addProperty("description", guild.description()); result.addProperty("points", guild.points());
+        GuildMember self = guild.member(actor.playerId()); result.addProperty("rank", self == null ? "MEMBER" : self.rank().name());
+        JsonArray members = new JsonArray();
+        for (GuildMember member : guild.members()) { JsonObject row = new JsonObject(); row.addProperty("id", member.playerId().toString()); row.addProperty("rank", member.rank().name()); members.add(row); }
+        result.add("members", members);
+    }
+
+    private void guildTop(JsonObject result) {
+        JsonArray leaderboard = new JsonArray(); int rank = 0;
+        for (Guild guild : guildService.top(20)) {
+            JsonObject row = new JsonObject(); row.addProperty("rank", ++rank); row.addProperty("name", guild.name());
+            row.addProperty("tag", guild.tag()); row.addProperty("points", guild.points()); row.addProperty("members", guild.members().size()); leaderboard.add(row);
+        }
+        result.add("leaderboard", leaderboard);
+    }
+
+    private void pointsSummary(Actor actor, JsonObject result) {
+        JsonArray balances = new JsonArray();
+        for (String currency : java.util.List.of("NEXUS_POINTS", "HARDCORE_POINTS", "BUILD_POINTS", "EVENT_POINTS", "SEASON_POINTS")) {
+            JsonObject row = new JsonObject(); row.addProperty("currency", currency); row.addProperty("balance", pointsService.balance(actor.playerId(), currency)); balances.add(row);
+        }
+        result.add("balances", balances);
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         cache(event.getPlayer().getName(), event.getPlayer().getUniqueId());
+        if (!firstJoinReward.enabled() || event.getPlayer().hasPlayedBefore()) return;
+        Player player = event.getPlayer(); Actor actor = actor(player);
+        if (!firstJoinReward.worlds().contains(actor.world().id())) return;
+        io.execute(() -> {
+            try {
+                pointsService.awardOnce(actor, player.getUniqueId(), "first-join-v1", firstJoinReward.currency(), firstJoinReward.amount(), gg.neonnexus.smpplatform.phase3.points.PointsDomain.Source.GAMEPLAY, firstJoinReward.reason(), Map.of("automaticReward", "first-join-v1"));
+            } catch (RuntimeException exception) { plugin.getLogger().log(Level.WARNING, "Configured first-join reward was not applied", exception); }
+        });
     }
 
     private void cache(String name, UUID id) {

@@ -6,7 +6,7 @@ import java.util.Objects;
 
 /** World-specific capability policy supplied by the parent World Registry/configuration layer. */
 public final class WorldPolicy {
-    public enum GuildMode { FULL, CONFIGURABLE, SOCIAL, COMPETITION, INHERIT_ASHFALL, READ_ONLY }
+    public enum GuildMode { DISABLED, FULL, CONFIGURABLE, SOCIAL, COMPETITION, INHERIT_ASHFALL, READ_ONLY }
 
     private final Map<NeonWorld, GuildMode> guildModes;
     private final boolean obsidianGateGuildsEnabled;
@@ -22,6 +22,7 @@ public final class WorldPolicy {
 
     private static Map<NeonWorld, GuildMode> defaultModes() {
         return Map.of(
+                NeonWorld.SPAWN_HUB, GuildMode.DISABLED,
                 NeonWorld.ASHFALL, GuildMode.FULL,
                 NeonWorld.OBSIDIAN_GATE, GuildMode.CONFIGURABLE,
                 NeonWorld.ATRIUM, GuildMode.SOCIAL,
@@ -33,6 +34,7 @@ public final class WorldPolicy {
 
     public static WorldPolicy defaults() {
         return new WorldPolicy(Map.of(
+                NeonWorld.SPAWN_HUB, GuildMode.DISABLED,
                 NeonWorld.ASHFALL, GuildMode.FULL,
                 NeonWorld.OBSIDIAN_GATE, GuildMode.CONFIGURABLE,
                 NeonWorld.ATRIUM, GuildMode.SOCIAL,
@@ -47,7 +49,7 @@ public final class WorldPolicy {
     /** Creates/membership mutations are intentionally denied in archived Verdance. */
     public boolean permitsGuildMutation(NeonWorld world) {
         return switch (guildMode(world)) {
-            case READ_ONLY -> false;
+            case DISABLED, READ_ONLY -> false;
             case CONFIGURABLE -> obsidianGateGuildsEnabled;
             case FULL, SOCIAL, COMPETITION, INHERIT_ASHFALL -> true;
         };
@@ -60,6 +62,7 @@ public final class WorldPolicy {
 
     public boolean permitsCurrency(NeonWorld world, String currencyId) {
         Objects.requireNonNull(currencyId, "currencyId");
+        if (world == NeonWorld.SPAWN_HUB) return false;
         if (world == NeonWorld.VERDANCE) return false;
         return switch (currencyId) {
             case "HARDCORE_POINTS" -> world == NeonWorld.OBSIDIAN_GATE;

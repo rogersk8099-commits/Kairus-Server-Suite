@@ -32,7 +32,9 @@ public record PlatformConfiguration(
         public record WorldOverride(String minecraftWorldName, boolean maintenanceMode) { }
     }
     public record Guilds(boolean enabled, Map<String, String> worldPolicy) { }
-    public record Points(boolean enabled, List<String> currencies) { }
+    public record Points(boolean enabled, List<String> currencies, AutomaticReward firstJoinReward) {
+        public record AutomaticReward(boolean enabled, String currency, long amount, String reason, List<String> worlds) { }
+    }
     public record Hardcore(boolean enabled, String worldId, ResetWindow reset) {
         public record ResetWindow(boolean enabled, String day, String time, String timezone) { }
     }

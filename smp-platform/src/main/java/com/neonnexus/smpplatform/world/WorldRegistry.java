@@ -100,6 +100,26 @@ public final class WorldRegistry {
         finally { lock.readLock().unlock(); }
     }
 
+    /** Applies a local, cache-persisted maintenance override until a newer Control Plane revision arrives. */
+    public WorldDefinition setMaintenance(String id, boolean enabled) {
+        lock.writeLock().lock();
+        try {
+            WorldDefinition current = state.worlds.get(id);
+            if (current == null) throw new IllegalArgumentException("Unknown Neon Nexus world: " + id);
+            if (current.type() == WorldType.HUB && enabled) throw new IllegalArgumentException("Spawn Hub cannot be placed into maintenance mode.");
+            WorldDefinition changed = copyWithMaintenance(current, enabled);
+            Map<String, WorldDefinition> worlds = new LinkedHashMap<>(state.worlds); worlds.put(changed.id(), changed);
+            RegistryDocument document = new RegistryDocument(state.revision, clock.instant(), java.util.List.copyOf(worlds.values()));
+            state = new State(state.revision, state.lastSyncAt, state.offline, state.offlineReason, state.conflict, Map.copyOf(worlds));
+            persist(document, clock.instant());
+            return changed;
+        } finally { lock.writeLock().unlock(); }
+    }
+
+    private static WorldDefinition copyWithMaintenance(WorldDefinition world, boolean maintenance) {
+        return new WorldDefinition(world.id(), world.minecraftWorldName(), world.displayName(), world.description(), world.type(), world.season(), world.status(), world.difficulty(), world.borderSize(), world.pvpMode(), world.guildsEnabled(), world.pointsEnabled(), world.currencyId(), world.claimsEnabled(), world.economyEnabled(), world.inventoryGroup(), world.resetPolicy(), world.archivePolicy(), world.discordEnabled(), world.websiteVisible(), world.mapVisible(), world.playerCount(), maintenance, world.accessPermission(), world.spawnLocation());
+    }
+
     private void persist(RegistryDocument document, Instant at) {
         try {
             cache.save(new WorldRegistryCache.CachedRegistry(document, at));

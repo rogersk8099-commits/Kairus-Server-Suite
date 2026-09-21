@@ -1,10 +1,9 @@
 name: SMPPlatform
 version: ${version}
 main: com.neonnexus.smpplatform.SMPPlatform
-api-version: '1.21.4'
-author: Neon Nexus
-description: Unified Neon Nexus world, guild, points, lifecycle, events, creative, administration and integration platform.
-website: https://neonnexus.gg
+api-version: '26.2'
+author: Kairu SMP
+description: Unified Kairu world, guild, points, lifecycle, events, creative, administration and integration platform.
 softdepend:
   - Multiverse-Core
   - Multiverse-Inventories
@@ -16,8 +15,10 @@ softdepend:
   - floodgate
   - Skript
 commands:
+  kairuadmin:
+    description: Internal request gateway for the optional Kairu Fabric client.
   worlds:
-    description: Lists the exact six registered Neon Nexus worlds.
+    description: Lists the seven registered Kairu SMP worlds.
     permission: smpplatform.worlds
   guild:
     aliases: [g]
@@ -39,8 +40,13 @@ commands:
   nxlifecycle:
     description: Confirmation-backed Hardcore and Quarry administration.
     permission: smpplatform.admin.lifecycle
+  plotflags:
+    aliases: [plothelp]
+    description: Opens the player-readable Atrium plot settings guide.
+    permission: smpplatform.creative.use
 permissions:
   smpplatform.worlds: {default: true}
+  smpplatform.world.spawn-hub: {default: true}
   smpplatform.guild.use: {default: true}
   smpplatform.points.view: {default: true}
   smpplatform.events.use: {default: true}

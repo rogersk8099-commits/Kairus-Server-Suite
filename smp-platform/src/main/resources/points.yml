@@ -11,6 +11,9 @@ points:
     EVENT_POINTS: {display-name: "Event Points", account-kinds: [PLAYER, GUILD], worlds: [colosseum], allow-negative: false}
     SEASON_POINTS: {display-name: "Season Points", account-kinds: [PLAYER, GUILD], worlds: [ashfall, obsidian-gate, atrium, colosseum, quarry], allow-negative: false}
   sources: [GAMEPLAY, ADMIN, ACHIEVEMENT, EVENT, GUILD, QUEST, SKRIPT, API, SYSTEM, REFUND, ADJUSTMENT]
+  automatic-rewards:
+    # Disabled by default. When enabled, the durable reward key prevents repeat payouts across restarts.
+    first-join: {enabled: false, currency: NEXUS_POINTS, amount: 25, reason: "First Kairu SMP join", worlds: [ashfall]}
   leaderboard: {page-size: 10, refresh-seconds: 60}
   history: {player-page-size: 20, staff-page-size: 50}
   staff-actions: {require-reason-for: [set, remove], require-confirmation-for: [set]}

@@ -174,6 +174,14 @@ export class PostgresStore implements ControlPlaneStore {
     return { event: bridgeEventFrom(existing.rows[0]), created: false };
   }
 
+  async listBridgeEvents(after: string | null, limit: number): Promise<BridgeEventRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM bridge_events WHERE ($1::timestamptz IS NULL OR received_at > $1::timestamptz) ORDER BY received_at ASC, id ASC LIMIT $2",
+      [after, limit]
+    );
+    return rows.map(bridgeEventFrom);
+  }
+
   async listQueuedChatMessages(serverId: string, limit: number): Promise<ChatQueueMessage[]> {
     const { rows } = await this.pool.query(
       "SELECT * FROM chat_relay_queue WHERE server_id = $1 AND status = 'queued' ORDER BY created_at ASC, id ASC LIMIT $2",

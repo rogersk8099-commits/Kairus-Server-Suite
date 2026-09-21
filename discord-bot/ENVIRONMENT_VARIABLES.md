@@ -10,7 +10,7 @@
 | `DISCORD_GUILD_ID` | Yes | Yes | Dedicated guild ID used by setup, jobs, and guild-scoped command registration. |
 | `DATABASE_URL` | Yes | Yes | PostgreSQL connection used by the generated Prisma client. The control plane, not this bot, owns all DDL migrations. |
 | `API_URL` | Yes | Yes | Base URL of the central Kairu control-plane API. |
-| `API_SECRET` | Yes | Yes | Scoped bot-to-control-plane service secret; minimum 16 characters. |
+| `API_SECRET` | Yes | Yes | The Control Plane `ADMIN_API_KEY`; kept only in the bot's Railway secret store. |
 | `DISCORD_TOKEN` | No | Yes | Discord bot token. When absent/blank, HTTP starts and reports `gateway=dormant`; no gateway login or jobs start. |
 
 The implemented names are intentionally **not** `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`, `KAIRU_API_BASE_URL`, or `KAIRU_BOT_API_TOKEN`. Do not configure those aliases unless the code is deliberately changed and revalidated.
@@ -32,6 +32,7 @@ The implemented names are intentionally **not** `DISCORD_APPLICATION_ID`, `DISCO
 | `STREAM_INTERVAL_MS` | `300000` | YouTube reconciliation interval; size using the quota budget. |
 | `REMINDER_INTERVAL_MS` | `60000` | Event reminder delivery interval. |
 | `STATUS_INTERVAL_MS` | `60000` | Minecraft status publication interval. |
+| `DISCORD_CHANNEL_MAPPINGS` | `{}` | JSON mapping of event purpose to Discord channel ID. `SERVER_STATUS` overrides the setup status channel; `PLAYER_JOIN`, `PLAYER_LEAVE`, `PLAYER_DEATH`, `SERVER_STARTED`, and `SERVER_STOPPING` route the matching Minecraft events. |
 | `TWITCH_CLIENT_ID` | unset | Reserved for approved on-demand Helix reconciliation. Twitch discovery itself is EventSub-led through the control plane. |
 | `TWITCH_CLIENT_SECRET` | unset | Reserved for approved on-demand Helix reconciliation; minimum 16 characters when set. |
 | `YOUTUBE_API_KEY` | unset | Restricted official YouTube Data API key; minimum 16 characters when set. |

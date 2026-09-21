@@ -4,7 +4,9 @@ integrations:
   central-api:
     enabled: true
     base-url: "${SMPPLATFORM_API_BASE_URL}"
-    authentication: {mode: "ENVIRONMENT_OR_SECRET_MANAGER", bearer-token: "${SMPPLATFORM_API_TOKEN}"}
+    # Minekeep and similar managed hosts may not support custom environment variables.
+    # In that case create this file inside plugins/SMPPlatform with only the PLUGIN_API_KEY as its contents.
+    authentication: {mode: "ENVIRONMENT_OR_PROTECTED_FILE", bearer-token: "${SMPPLATFORM_API_TOKEN}", token-file: "control-plane-token.txt"}
     connect-timeout-ms: 2000
     request-timeout-ms: 5000
     retries: {max-attempts: 8, initial-backoff-ms: 1000, max-backoff-ms: 300000, jitter: true}

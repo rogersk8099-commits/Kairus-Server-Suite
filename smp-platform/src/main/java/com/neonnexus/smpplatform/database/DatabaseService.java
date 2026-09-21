@@ -35,8 +35,9 @@ public final class DatabaseService implements AutoCloseable {
         if (secret.source() == DatabasePasswordResolver.Source.FILE) logger.info("Database password loaded from the protected SMPPlatform data-file fallback.");
         HikariConfig pool = new HikariConfig();
         pool.setJdbcUrl(config.jdbcUrl()); pool.setUsername(config.username()); pool.setPassword(secret.value());
-        // Shadow relocates the JDBC driver; name it explicitly because JDBC service descriptors are not class-relocated reliably.
-        pool.setDriverClassName("com.neonnexus.smpplatform.lib.postgresql.Driver");
+        // Dependencies are bundled without relocation because the Java 25-compatible Shadow build cannot
+        // rewrite class-file version 69. The JDBC driver therefore retains its upstream class name.
+        pool.setDriverClassName("org.postgresql.Driver");
         pool.setMaximumPoolSize(config.poolSize()); pool.setConnectionTimeout(config.connectionTimeout().toMillis());
         pool.setValidationTimeout(config.validationTimeout().toMillis()); pool.setPoolName("SMPPlatform-PostgreSQL");
         pool.setAutoCommit(true); pool.setInitializationFailTimeout(-1);

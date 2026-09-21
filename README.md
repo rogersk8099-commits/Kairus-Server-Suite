@@ -1,8 +1,8 @@
 # Kairu SMP Complete Suite
 
-**Release integration guide · Manus AI · 7 September 2026**
+**Repository structure and integration guide**
 
-Kairu SMP Complete Suite is an integrated distribution for a **Paper/Purpur 1.21.4** Minecraft community with Java and Bedrock access. It combines a Node.js 22 control plane, dedicated modular Discord bot, Java 21 KairuBridge and SMPPlatform plugins, a crossplay-ready server pack, and a React/TanStack community website with Discord OAuth. The wire contract is defined in [`CONTRACT.md`](CONTRACT.md).
+Kairu SMP Complete Suite is an integrated distribution for Java and Bedrock Minecraft. It combines a Node.js 22 control plane, dedicated Discord bot, KairuBridge transport plugin, SMPPlatform gameplay plugin, optional Fabric client UI, crossplay-ready server pack, and React/TanStack community website with Discord OAuth. The wire contract is defined in [`CONTRACT.md`](CONTRACT.md).
 
 > **Lifecycle warning.** Paper 1.21.4 remains downloadable but is officially unsupported. Use this target only when 1.21.4 is a hard requirement, pin and stage-test the entire stack, and maintain an upgrade plan. [1] [2]
 
@@ -12,12 +12,23 @@ Kairu SMP Complete Suite is an integrated distribution for a **Paper/Purpur 1.21
 | --- | --- | --- |
 | `control-plane/` | Fastify API and shared PostgreSQL contract | Public website endpoints, Discord OAuth sessions, plugin telemetry/linking/queue/chat endpoints, migrations, and Railway deployment. |
 | `discord-bot/` | Dedicated Discord ecosystem bot | Idempotent `/setup-server`, account/linking commands, membership sync, events, suggestions, support, reminders, stream notifications, webhooks, and dormant health server. |
-| `paper-plugin/` | KairuBridge source | Java 21 Gradle project for telemetry, linking, bounded queue execution, and soft integrations. |
-| `smp-platform/` | Unified SMPPlatform source | Java 21 shaded Paper plugin with six-world registry, PostgreSQL/Flyway foundation, guilds, points, lifecycle/events/creative/admin domain modules, and optional adapters. |
+| `paper-plugin/` | KairuBridge source | Transport-only Paper plugin for telemetry, linking, bounded queue execution, chat relay and soft integrations. |
+| `smp-platform/` | Unified SMPPlatform source | Authoritative Paper plugin for worlds, guilds, currencies, points, lifecycle, events, creative and administration. |
+| `kairu-client/` | Optional Fabric client UI | OneConfig-inspired Java-player interface. It sends only permission-checked requests to SMPPlatform; Bedrock players use server-side interfaces. |
 | `server-pack/` | Paper/Purpur installation pack | Official-source installers, secure templates, Java launch scripts, `KairuBridge.jar`, and `SMPPlatform.jar`. |
 | `website/` | Community website | TanStack Start/React site with Discord OAuth, secure host-only sessions, branded favicon assets, real control-plane responses, and development-only mock fallback. |
 | `docs/` | Operator documentation | Installation, operations, security, and reproducible build evidence. |
-| `release/` | Distribution artifacts | Complete suite ZIP, component archives, plugin JAR, and SHA-256 manifest. |
+
+## Source-of-truth rules
+
+- **SMPPlatform** owns Minecraft gameplay state, permissions, guilds, points and world policy.
+- **KairuBridge** only transports approved data between Minecraft and the Control Plane. It never owns Discord credentials.
+- **Control Plane** owns API contracts, PostgreSQL persistence, queued chat/commands and identity linking.
+- **Discord bot** owns Discord categories, channel mappings and persistent status embeds.
+- **Kairu Client** is optional and never replaces the server plugin.
+- `server-pack/plugins/*.jar` are release artifacts only. Build from source before replacing them.
+
+The repository intentionally keeps both Paper plugins: they have different responsibilities and must not be merged into a second competing gameplay plugin.
 
 ## Live deployment
 

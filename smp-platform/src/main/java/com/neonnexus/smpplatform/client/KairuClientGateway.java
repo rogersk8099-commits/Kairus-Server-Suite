@@ -19,6 +19,8 @@ import java.time.Instant;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /** Permission-checked server gateway for the optional Fabric UI. No client request is trusted as authority. */
 public final class KairuClientGateway {
@@ -34,7 +36,7 @@ public final class KairuClientGateway {
         if (!(sender instanceof Player player) || args.length < 2 || !args[0].matches("[a-f0-9-]{36}")) return true;
         String requestId = args[0];
         String action = args[1].toLowerCase(Locale.ROOT);
-        if (action.equals("guild-summary") || action.equals("guild-top") || action.equals("points-summary")) {
+        if (action.equals("guild-summary") || action.equals("guild-top") || action.equals("guild-invites") || action.equals("points-summary")) {
             plugin.clientView(player, action, data -> Bukkit.getScheduler().runTask(plugin, () -> {
                 Player online = Bukkit.getPlayer(player.getUniqueId());
                 if (online != null) reply(online, requestId, data.has("error") ? data.get("error").getAsString() : "Updated.", action, data);
@@ -49,7 +51,15 @@ public final class KairuClientGateway {
             }));
             return true;
         }
-        if (List.of("guild-invite", "guild-kick", "guild-promote", "guild-demote", "guild-leave", "guild-transfer-arm", "guild-transfer-confirm").contains(action)) {
+        if (action.equals("guild-create")) {
+            String[] values = decodeGuildCreate(require(args, 2, "Enter a guild name and tag."));
+            plugin.clientGuildCreate(player, values[0], values[1], values[2], data -> Bukkit.getScheduler().runTask(plugin, () -> {
+                Player online = Bukkit.getPlayer(player.getUniqueId());
+                if (online != null) reply(online, requestId, data.has("error") ? data.get("error").getAsString() : data.get("message").getAsString(), "guild-summary", data);
+            }));
+            return true;
+        }
+        if (List.of("guild-invite", "guild-kick", "guild-promote", "guild-demote", "guild-leave", "guild-transfer-arm", "guild-transfer-confirm", "guild-accept").contains(action)) {
             UUID target = action.equals("guild-leave") ? null : requireUuid(args, 2);
             plugin.clientGuildAction(player, action, target, data -> Bukkit.getScheduler().runTask(plugin, () -> {
                 Player online = Bukkit.getPlayer(player.getUniqueId());
@@ -64,9 +74,18 @@ public final class KairuClientGateway {
         return true;
     }
 
+    private static String[] decodeGuildCreate(String encoded) {
+        try {
+            String[] values = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8).split("\\|", 3);
+            if (values.length < 2 || values[0].isBlank() || values[1].isBlank()) throw new IllegalArgumentException();
+            return new String[] { values[0].trim(), values[1].trim(), values.length == 3 ? values[2].trim() : "" };
+        } catch (IllegalArgumentException exception) { throw new IllegalArgumentException("Enter a guild name and tag in the required format."); }
+    }
+
     private String perform(Player actor, String action, String[] args) {
         return switch (action) {
             case "status" -> "SMPPlatform connected.";
+            case "setup" -> isAdmin(actor) ? "Server setup is ready. Run /kairuadmin setup preview, then /kairuadmin setup apply." : "Server setup requires administrator access.";
             case "travel" -> travel(actor, require(args, 2, "Choose a world."));
             case "heal", "feed", "teleport", "enderchest", "clear-inventory", "clear-effects", "xp-zero", "gamemode-survival", "gamemode-creative", "gamemode-adventure", "gamemode-spectator" -> playerAction(actor, action, requireUuid(args, 2));
             case "day", "night", "clear", "rain", "thunder", "pvp-on", "pvp-off" -> worldAction(actor, action, require(args, 2, "Choose a world."));

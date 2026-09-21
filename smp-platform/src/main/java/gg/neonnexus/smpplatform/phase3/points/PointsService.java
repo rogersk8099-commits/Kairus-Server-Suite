@@ -40,6 +40,16 @@ public final class PointsService {
         return java.util.Optional.ofNullable(transaction);
     }
     public PointTransaction remove(Actor actor, UUID playerId, String currencyId, long amount, String reason, Map<String, String> metadata) { requireAdmin(actor); require(amount > 0, Phase3Exception.Code.INVALID_ARGUMENT, "amount must be positive"); return mutate(actor, new AccountKey(OwnerType.PLAYER, playerId, currencyId), -amount, Source.ADMIN, reason, metadata, true); }
+    /**
+     * Charges the actor's own player account for a server-owned gameplay action.  Unlike
+     * {@link #remove}, this deliberately does not grant administrative spending power to the
+     * caller.  The repository's atomic balance update rejects an insufficient balance.
+     */
+    public PointTransaction spend(Actor actor, UUID playerId, String currencyId, long amount, Source source, String reason, Map<String, String> metadata) {
+        require(actor.playerId().equals(playerId), Phase3Exception.Code.FORBIDDEN, "You can only spend points from your own account");
+        require(amount > 0, Phase3Exception.Code.INVALID_ARGUMENT, "amount must be positive");
+        return mutate(actor, new AccountKey(OwnerType.PLAYER, playerId, currencyId), -amount, source, reason, metadata, false);
+    }
     public PointTransaction add(Actor actor, UUID playerId, String currencyId, long amount, String reason, Map<String, String> metadata) { requireAdmin(actor); return award(actor, playerId, currencyId, amount, Source.ADMIN, reason, metadata); }
     public PointTransaction set(Actor actor, UUID playerId, String currencyId, long targetBalance, String reason, Map<String, String> metadata) {
         requireAdmin(actor); require(targetBalance >= 0 || allowNegativeBalances, Phase3Exception.Code.INVALID_ARGUMENT, "negative balances are disabled");

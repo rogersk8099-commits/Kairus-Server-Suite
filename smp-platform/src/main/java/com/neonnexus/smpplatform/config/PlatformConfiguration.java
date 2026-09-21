@@ -21,7 +21,7 @@ public record PlatformConfiguration(
     public record Core(String serverId, Database database, CentralApi centralApi, Async async, Inventory inventory) {
         public record Database(String jdbcUrl, String username, String passwordEnvironment, Path passwordFile, int poolSize,
                                Duration connectionTimeout, Duration validationTimeout) { }
-        public record CentralApi(boolean enabled, String baseUrl, String tokenEnvironment, Duration syncInterval) { }
+        public record CentralApi(boolean enabled, String baseUrl, String tokenEnvironment, Path tokenFile, Duration syncInterval) { }
         public record Async(int ioThreads, Duration shutdownTimeout) { }
         public record Inventory(boolean shareQuarryWithAshfall) {
             public InventoryGroupPolicy policy() { return new InventoryGroupPolicy(shareQuarryWithAshfall); }
@@ -31,7 +31,7 @@ public record PlatformConfiguration(
     public record WorldFile(String cacheFile, long initialRevision, Map<String, WorldOverride> overrides) {
         public record WorldOverride(String minecraftWorldName, boolean maintenanceMode) { }
     }
-    public record Guilds(boolean enabled, Map<String, String> worldPolicy) { }
+    public record Guilds(boolean enabled, Map<String, String> worldPolicy, String creationCurrency, long creationCost) { }
     public record Points(boolean enabled, List<String> currencies, AutomaticReward firstJoinReward) {
         public record AutomaticReward(boolean enabled, String currency, long amount, String reason, List<String> worlds) { }
     }

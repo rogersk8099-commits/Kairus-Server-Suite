@@ -147,6 +147,14 @@ export class MemoryStore implements ControlPlaneStore {
     return { event: { ...record, details: { ...record.details } }, created: true };
   }
 
+  async listBridgeEvents(after: string | null, limit: number): Promise<BridgeEventRecord[]> {
+    return [...this.bridgeEvents.values()]
+      .filter((event) => after === null || event.receivedAt > after)
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id))
+      .slice(0, limit)
+      .map((event) => ({ ...event, details: { ...event.details } }));
+  }
+
   async listQueuedChatMessages(serverId: string, limit: number): Promise<ChatQueueMessage[]> {
     return [...this.chatMessages.values()]
       .filter((message) => message.serverId === serverId && message.status === "queued")

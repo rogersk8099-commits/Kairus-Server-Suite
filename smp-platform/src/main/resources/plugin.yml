@@ -27,6 +27,9 @@ commands:
   points:
     description: Point balances, history, leaderboards and audited administration.
     permission: smpplatform.points.view
+  kairu:
+    description: Link your Minecraft account to Discord using a one-time code.
+    usage: /kairu link <code>
   events:
     description: Colosseum event RSVP and check-in.
     permission: smpplatform.events.use
@@ -52,6 +55,7 @@ permissions:
   smpplatform.events.use: {default: true}
   smpplatform.creative.use: {default: true}
   smpplatform.admin: {default: op}
+  smpplatform.admin.setup: {default: op}
   smpplatform.admin.players: {default: op}
   smpplatform.admin.worlds: {default: op}
   smpplatform.admin.monitor: {default: op}

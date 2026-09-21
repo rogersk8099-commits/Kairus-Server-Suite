@@ -185,6 +185,7 @@ export interface ControlPlaneStore {
   acknowledgePluginCommand(serverId: string, id: string, status: "completed" | "failed", errorMessage?: string): Promise<PluginCommand | null>;
   queuePluginCommand(command: NewPluginCommand): Promise<PluginCommand>;
   recordBridgeEvent(event: NewBridgeEvent): Promise<{ event: BridgeEventRecord; created: boolean }>;
+  listBridgeEvents(after: string | null, limit: number): Promise<BridgeEventRecord[]>;
   listQueuedChatMessages(serverId: string, limit: number): Promise<ChatQueueMessage[]>;
   acknowledgeChatMessage(serverId: string, id: string, status: "delivered" | "rejected", detail: string): Promise<ChatQueueMessage | null>;
   queueChatMessage(message: NewChatQueueMessage): Promise<{ message: ChatQueueMessage; created: boolean }>;

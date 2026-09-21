@@ -43,11 +43,17 @@ public final class GuildService {
     }
 
     public Guild create(Actor actor, String name, String tag, String description) {
+        return create(actor, name, tag, description, null);
+    }
+
+    /** The optional charge runs inside the same transaction as the guild write. */
+    public Guild create(Actor actor, String name, String tag, String description, Runnable creationCharge) {
         requirePolicy(actor); require(actor.has("smpplatform.guild.create") || actor.isGuildAdmin(), "Missing smpplatform.guild.create");
         Instant now = clock.instant();
         Guild guild = transactions.required(() -> {
             require(repository.findByPlayer(actor.playerId()).isEmpty(), "You are already in a guild");
             require(repository.findByNameOrTag(name).isEmpty(), "Guild name or tag is already taken");
+            if (creationCharge != null) creationCharge.run();
             Guild created = new Guild(UUID.randomUUID(), name, tag, description, actor.playerId(), now, 0, 0,
                     List.of(new GuildMember(actor.playerId(), GuildRank.LEADER, now)));
             return repository.insert(created);
@@ -196,8 +202,11 @@ public final class GuildService {
     }
 
     public Guild info(String nameOrTag) { return transactions.required(() -> requireGuild(repository.findByNameOrTag(nameOrTag))); }
+    public Guild byId(UUID guildId) { return transactions.required(() -> requireGuild(repository.findById(guildId))); }
     /** Read-only lookup used by the optional client gateway; run this on the database executor. */
     public java.util.Optional<Guild> byPlayer(UUID playerId) { return transactions.required(() -> repository.findByPlayer(playerId)); }
+    /** Active invitations are player-private but may be displayed by the optional client. */
+    public List<GuildInvite> invites(UUID playerId) { return transactions.required(() -> repository.findInvitesFor(playerId, clock.instant())); }
     public List<GuildMember> members(String nameOrTag) { return info(nameOrTag).members(); }
     public List<Guild> top(int limit) { return transactions.required(() -> repository.topByPoints(validLimit(limit))); }
 

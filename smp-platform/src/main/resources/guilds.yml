@@ -1,6 +1,9 @@
 config-version: 1
 guilds:
   enabled: true
+  # Charged by SMPPlatform in the same PostgreSQL transaction as guild creation.
+  guild-create-currency: KAIRU_POINTS
+  guild-create-cost: 500
   name: {min-length: 3, max-length: 24, pattern: "^[A-Za-z0-9 _-]+$", case-insensitive-unique: true}
   tag: {min-length: 2, max-length: 6, pattern: "^[A-Za-z0-9]+$", case-insensitive-unique: true}
   description-max-length: 240

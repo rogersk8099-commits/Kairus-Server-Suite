@@ -25,7 +25,7 @@ public final class AdminScreen extends Screen {
     public AdminScreen(){super(Component.literal("Kairu SMP"));}
     @Override public boolean isPauseScreen(){return false;}
     @Override protected void init(){build();}
-    private void go(String next){route=next;page=0;query="";build();if(next.equals("guilds"))KairuClient.request("guild-summary");if(next.equals("guild-top"))KairuClient.request("guild-top");if(next.equals("points"))KairuClient.request("points-summary");}
+    private void go(String next){route=next;page=0;query="";build();if(next.equals("guilds"))KairuClient.request("guild-summary");if(next.equals("guild-top"))KairuClient.request("guild-top");if(next.equals("guild-invites"))KairuClient.request("guild-invites");if(next.equals("points"))KairuClient.request("points-summary");}
     @Override public void tick(){
         if(!KairuClient.connected()||KairuClient.state==null){onClose();return;}
         if(seenRevision!=KairuClient.revision){seenRevision=KairuClient.revision;build();}
@@ -36,7 +36,7 @@ public final class AdminScreen extends Screen {
         try {
             boolean focused=search!=null&&search.isFocused();
             clearWidgets();entries.clear();layout=Layout.of(width,height);
-            if(!KairuClient.admin()&&!Set.of("plots","members","member","flags","flag","travel","guilds","guild-top","points","points-currency","points-history","points-top","guild-invite","guild-members","guild-member","guild-leave","guild-transfer-arm","guild-transfer-confirm","world-unload-arm","world-unload-confirm").contains(route))route="travel";
+            if(!KairuClient.admin()&&!Set.of("plots","members","member","flags","flag","travel","guilds","guild-create","guild-invites","guild-top","points","points-currency","points-history","points-top","guild-invite","guild-members","guild-member","guild-leave","guild-transfer-arm","guild-transfer-confirm","world-unload-arm","world-unload-confirm").contains(route))route="travel";
             int x=layout.x(),y=layout.y(),w=layout.width();
             button(x+w-56,y+12,44,"Close",this::onClose);
             var tabs=new ArrayList<String>();
@@ -45,11 +45,12 @@ public final class AdminScreen extends Screen {
             for(int i=0;i<tabs.size();i++) {String tab=tabs.get(i);
                 navButton(layout.sidebar()?x+12:x+12+i*tabW,layout.sidebar()?y+58+i*30:y+47,tabW-4,capitalize(tab),tab.equals(route),()->go(tab));}
             buildEntries();
-            search=new EditBox(font,layout.contentX(),layout.contentY(),Math.max(20,layout.contentWidth()),20,Component.literal("Search this page"));
-            search.setMaxLength(80);search.setValue(query);search.setHint(Component.literal("Search..."));
+            boolean guildCreate=route.equals("guild-create");
+            search=new EditBox(font,layout.contentX(),layout.contentY(),Math.max(20,layout.contentWidth()),20,Component.literal(guildCreate?"Guild name | TAG | optional description":"Search this page"));
+            search.setMaxLength(guildCreate?240:80);search.setValue(query);search.setHint(Component.literal(guildCreate?"Example: Aurora Guild | AUR | Friends welcome":"Search..."));
             search.setResponder(value->{if(!query.equals(value)){query=value;page=0;build();}});addRenderableWidget(search);
             if(focused)setInitialFocus(search);
-            var visible=entries.stream().filter(e->e.label.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))).toList();
+            var visible=guildCreate?List.copyOf(entries):entries.stream().filter(e->e.label.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))).toList();
             int capacity=layout.pageSize(),maxPage=Math.max(0,(visible.size()-1)/capacity);page=Math.min(page,maxPage);
             int cellW=Math.max(20,(layout.contentWidth()-8*(layout.columns()-1))/layout.columns());
             for(int n=page*capacity;n<Math.min(visible.size(),(page+1)*capacity);n++) {
@@ -59,6 +60,7 @@ public final class AdminScreen extends Screen {
             int footer=layout.y()+layout.height()-36;
             button(x+12,footer,54,"Refresh",()->{
                 if(Set.of("inventory","slot","swap","delete").contains(route)&&KairuClient.can("inventory"))KairuClient.request("inventory",target);
+                else if(route.equals("guild-invites"))KairuClient.request("guild-invites");
                 else if(route.startsWith("guild"))KairuClient.request("guild-summary");
                 else if(route.equals("points"))KairuClient.request("points-summary");
                 else if(route.equals("points-history"))KairuClient.request("points-history",target);
@@ -71,6 +73,13 @@ public final class AdminScreen extends Screen {
     }
     private void add(String label,Runnable action){entries.add(new Entry(label,action));}
     private void run(String... command){KairuClient.request(command);}
+    private void createGuildFromForm(){
+        String value=search==null?"":search.getValue().trim();String[] parts=value.split("\\|",3);
+        if(parts.length<2||parts[0].trim().isEmpty()||parts[1].trim().isEmpty()){KairuClient.notice("Use: Guild name | TAG | optional description");return;}
+        String encoded=Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        run("guild-create",encoded);go("guilds");
+    }
+    private static String guildCost(JsonObject guild){return guild.has("creationCost")?guild.get("creationCost").getAsLong()+" "+guild.get("creationCurrency").getAsString():"500 KAIRU_POINTS";}
     private void buildEntries(){
         var s=KairuClient.state;heading=capitalize(route);
         switch(route){
@@ -89,7 +98,7 @@ public final class AdminScreen extends Screen {
                 if(!s.has("guild")){add("Loading guild profile...",()->run("guild-summary"));return;}
                 JsonObject guild=s.getAsJsonObject("guild");
                 if(guild.has("error")){add(guild.get("error").getAsString(),()->run("guild-summary"));return;}
-                if(!guild.get("inGuild").getAsBoolean()){add("You are not in a guild",()->{});add("Create or join: use /guild create or /guild join",()->{});add("Guild leaderboard",()->go("guild-top"));add("Refresh",()->run("guild-summary"));return;}
+                if(!guild.get("inGuild").getAsBoolean()){add("You are not in a guild",()->{});add("Create guild · "+guildCost(guild),()->go("guild-create"));add("Guild invitations",()->go("guild-invites"));add("Guild leaderboard",()->go("guild-top"));add("Refresh",()->run("guild-summary"));return;}
                 add(guild.get("name").getAsString()+" ["+guild.get("tag").getAsString()+"]",()->{});
                 add("Rank: "+guild.get("rank").getAsString()+" · Guild Points: "+guild.get("points").getAsLong()+" · Members: "+guild.getAsJsonArray("members").size(),()->{});
                 add("Manage members",()->go("guild-members"));
@@ -98,6 +107,8 @@ public final class AdminScreen extends Screen {
                 add("Leave guild",()->go("guild-leave"));
                 add("Disband: /guild disband",()->{});add("Refresh",()->run("guild-summary"));
             }
+            case "guild-create" -> {heading="Create guild · "+guildCost(s.getAsJsonObject("guild"));add("Enter: Guild name | TAG | optional description",()->{});add("Create guild",this::createGuildFromForm);add("Back to guilds",()->go("guilds"));}
+            case "guild-invites" -> {heading="Guild invitations";if(!s.has("guild-invites")){add("Loading invitations...",()->run("guild-invites"));return;}JsonObject data=s.getAsJsonObject("guild-invites");if(data.has("error")){add(data.get("error").getAsString(),()->run("guild-invites"));return;}if(data.getAsJsonArray("invites").isEmpty())add("You have no active guild invitations.",()->{});else data.getAsJsonArray("invites").forEach(value->{JsonObject row=value.getAsJsonObject();add("Accept "+row.get("name").getAsString()+" ["+row.get("tag").getAsString()+"]",()->{run("guild-accept",row.get("guildId").getAsString());go("guilds");});});add("Back to guilds",()->go("guilds"));}
             case "guild-invite" -> {heading="Invite to guild";s.getAsJsonArray("players").forEach(player->{JsonObject row=player.getAsJsonObject();add("Invite "+row.get("name").getAsString(),()->{run("guild-invite",row.get("id").getAsString());go("guilds");});});add("Back to guild",()->go("guilds"));}
             case "guild-members" -> {heading="Guild members";if(!s.has("guild")||s.getAsJsonObject("guild").has("error")){add("Refresh guild profile",()->run("guild-summary"));return;}JsonObject guild=s.getAsJsonObject("guild");if(!guild.get("inGuild").getAsBoolean()){go("guilds");return;}guild.getAsJsonArray("members").forEach(member->{JsonObject row=member.getAsJsonObject();String id=row.get("id").getAsString();String name=playerName(id);add(row.get("rank").getAsString()+" · "+name,()->{target=id;targetName=name;go("guild-member");});});add("Back to guild",()->go("guilds"));}
             case "guild-member" -> {heading="Guild member: "+targetName;add("Promote",()->{run("guild-promote",target);go("guilds");});add("Demote",()->{run("guild-demote",target);go("guilds");});add("Kick from guild",()->{run("guild-kick",target);go("guilds");});add("Transfer ownership...",()->go("guild-transfer-arm"));add("Back to members",()->go("guild-members"));}

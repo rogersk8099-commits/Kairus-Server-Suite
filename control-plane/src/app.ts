@@ -79,6 +79,7 @@ const chatAckSchema = z.object({
   status: z.enum(["delivered", "rejected"]),
   detail: z.string().trim().min(1).max(500).refine((value) => !/[\u0000-\u001F\u007F]/u.test(value), "detail contains prohibited control characters")
 }).strict();
+const bridgeEventQuerySchema = z.object({ after: z.string().datetime({ offset: true }).optional(), limit: z.coerce.number().int().min(1).max(100).default(50) });
 const queueChatSchema = z.object({
   serverId,
   content: boundedContent,
@@ -277,6 +278,11 @@ export function buildApp(config: AppConfig, store: ControlPlaneStore, authStore?
       details: body.details ?? {}
     });
     return reply.code(result.created ? 201 : 200).send({ event: result.event, duplicate: !result.created });
+  });
+  app.get("/api/admin/bridge-events", async (request) => {
+    requireAdmin(request, config);
+    const query = bridgeEventQuerySchema.parse(request.query);
+    return { events: await store.listBridgeEvents(query.after ?? null, query.limit) };
   });
   app.get("/api/plugin/chat/queued", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (request) => {
     const authenticatedServerId = requirePlugin(request, config);

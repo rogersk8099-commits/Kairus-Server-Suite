@@ -8,8 +8,10 @@ import java.util.UUID;
 
 /** Async command dispatcher for /guild and /g. The parent plugin runs execute off-thread. */
 public final class GuildCommandHandler {
-    private final GuildService guilds; private final PlayerDirectory players;
-    public GuildCommandHandler(GuildService guilds, PlayerDirectory players) { this.guilds=guilds; this.players=players; }
+    @FunctionalInterface public interface GuildCreator { Guild create(Actor actor, String name, String tag, String description); }
+    private final GuildService guilds; private final PlayerDirectory players; private final GuildCreator creator;
+    public GuildCommandHandler(GuildService guilds, PlayerDirectory players) { this(guilds, players, guilds::create); }
+    public GuildCommandHandler(GuildService guilds, PlayerDirectory players, GuildCreator creator) { this.guilds=guilds; this.players=players; this.creator=creator; }
     public CommandReply execute(Actor actor, String[] args) {
         try {
             if (args.length==0) return CommandReply.gui("guild.overview", "Opening Guilds");
@@ -22,7 +24,7 @@ public final class GuildCommandHandler {
             };
         } catch (Phase3Exception | IllegalArgumentException exception) { return CommandReply.error(exception.getMessage()); }
     }
-    private CommandReply create(Actor a,String[] x){ if(x.length<3)return CommandReply.error("Usage: /guild create <name> <tag> [description]");Guild g=guilds.create(a,x[1],x[2],join(x,3));return CommandReply.gui("guild.manage","Created " + g.name()+" ["+g.tag()+"]"); }
+    private CommandReply create(Actor a,String[] x){ if(x.length<3)return CommandReply.error("Usage: /guild create <name> <tag> [description]");Guild g=creator.create(a,x[1],x[2],join(x,3));return CommandReply.gui("guild.manage","Created " + g.name()+" ["+g.tag()+"]"); }
     private CommandReply invite(Actor a,String[] x){UUID id=target(x,1,"Usage: /guild invite <player>");GuildInvite i=guilds.invite(a,id);return CommandReply.ok("Invite sent; expires " + i.expiresAt());}
     private CommandReply accept(Actor a,String[] x){UUID id=uuid(x,1,"Usage: /guild join <guild-uuid>");Guild g=guilds.accept(a,id);return CommandReply.gui("guild.overview","Joined "+g.name());}
     private CommandReply decline(Actor a,String[] x){guilds.decline(a,uuid(x,1,"Usage: /guild decline <guild-uuid>"));return CommandReply.ok("Guild invite declined");}

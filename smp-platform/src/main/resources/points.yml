@@ -4,6 +4,7 @@ points:
   precision: 0
   transaction-ledger: {required-for-every-change: true, immutable: true, idempotency-required: true}
   currencies:
+    KAIRU_POINTS: {display-name: "Kairu Points", account-kinds: [PLAYER], worlds: [ashfall, quarry], allow-negative: false}
     NEXUS_POINTS: {display-name: "Nexus Points", account-kinds: [PLAYER], worlds: [ashfall, quarry], allow-negative: false}
     GUILD_POINTS: {display-name: "Guild Points", account-kinds: [GUILD], worlds: [ashfall, obsidian-gate, atrium, colosseum, quarry], allow-negative: false}
     HARDCORE_POINTS: {display-name: "Hardcore Points", account-kinds: [PLAYER], worlds: [obsidian-gate], allow-negative: false}

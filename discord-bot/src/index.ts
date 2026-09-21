@@ -23,7 +23,7 @@ const account = createAccountServices(prisma, api, client, config, logger);
 const setup = new ServerSetupService(new SetupResourceStore(prisma), undefined, { warn: (message, metadata) => logger.warn(metadata, message) });
 const dependencies = { database: prisma, client, logger, account, setup };
 const commands = createCommandRegistry(dependencies);
-const jobs = new RuntimeJobs(prisma, client, config, { youtube: new YouTubeDataProvider(config.YOUTUBE_API_KEY) }, idempotency, logger.child({ component: "jobs" }));
+const jobs = new RuntimeJobs(prisma, client, config, api, { youtube: new YouTubeDataProvider(config.YOUTUBE_API_KEY) }, idempotency, logger.child({ component: "jobs" }));
 const http = buildHttpServer({ config, database: prisma, idempotency, logger: logger.child({ component: "http" }), state, onMembership: async (userId) => { const member = await client.guilds.fetch(config.DISCORD_GUILD_ID).then((guild) => guild.members.fetch(userId)); await welcomeMember(prisma, member, logger); } });
 
 client.once(Events.ClientReady, (ready) => { state.gateway = "ready"; logger.info({ userId: ready.user.id, guilds: ready.guilds.cache.size }, "Discord gateway ready"); jobs.start(); });

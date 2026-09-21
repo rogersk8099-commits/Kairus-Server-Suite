@@ -5,6 +5,7 @@ const optionalString = z.preprocess((value) => typeof value === "string" && valu
 const optionalSecret = z.preprocess((value) => typeof value === "string" && value.trim() === "" ? undefined : value, z.string().min(16).optional());
 const snowflake = z.string().regex(/^\d{5,32}$/, "must be a Discord snowflake");
 const postgresUrl = z.string().url().refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), "must be a PostgreSQL URL");
+const channelMappings = z.string().default("{}");
 
 const schemaShape = {
   DISCORD_TOKEN: optionalString,
@@ -26,13 +27,14 @@ const schemaShape = {
   STREAM_INTERVAL_MS: z.coerce.number().int().min(30_000).default(300_000),
   REMINDER_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
   STATUS_INTERVAL_MS: z.coerce.number().int().min(30_000).default(60_000),
+  DISCORD_CHANNEL_MAPPINGS: channelMappings,
   TWITCH_CLIENT_ID: optionalString,
   TWITCH_CLIENT_SECRET: optionalSecret,
   YOUTUBE_API_KEY: optionalSecret
 };
 const schema = z.object(schemaShape).strict();
 
-export type AppConfig = z.infer<typeof schema>;
+export type AppConfig = Omit<z.infer<typeof schema>, "DISCORD_CHANNEL_MAPPINGS"> & { DISCORD_CHANNEL_MAPPINGS: Readonly<Record<string, string>> };
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   const exactSource = Object.fromEntries(Object.keys(schemaShape).map((name) => [name, source[name]]));
@@ -41,5 +43,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     const fields = parsed.error.issues.map((issue) => issue.path.join(".")).filter(Boolean);
     throw new Error(`Invalid environment configuration: ${[...new Set(fields)].join(", ")}`);
   }
-  return Object.freeze({ ...parsed.data, API_URL: parsed.data.API_URL.replace(/\/+$/, "") });
+  let mappings: unknown;
+  try { mappings = JSON.parse(parsed.data.DISCORD_CHANNEL_MAPPINGS); }
+  catch { throw new Error("Invalid environment configuration: DISCORD_CHANNEL_MAPPINGS must be JSON"); }
+  const checked = z.record(z.string().min(1).max(64), snowflake).safeParse(mappings);
+  if (!checked.success) throw new Error("Invalid environment configuration: DISCORD_CHANNEL_MAPPINGS must map purposes to Discord channel IDs");
+  return Object.freeze({ ...parsed.data, API_URL: parsed.data.API_URL.replace(/\/+$/, ""), DISCORD_CHANNEL_MAPPINGS: Object.freeze(checked.data) });
 }

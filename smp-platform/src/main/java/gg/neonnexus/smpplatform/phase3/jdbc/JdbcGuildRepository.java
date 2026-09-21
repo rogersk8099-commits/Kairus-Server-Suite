@@ -96,6 +96,17 @@ public final class JdbcGuildRepository implements GuildRepository {
         } catch (SQLException exception) { throw storage(exception); }
     }
 
+    @Override public List<GuildInvite> findInvitesFor(UUID targetId, Instant now) {
+        try (PreparedStatement statement = connection().prepareStatement("SELECT invite_id,guild_id,invited_by,created_at,expires_at FROM smp_guild_invites WHERE target_player_id=? AND expires_at>? ORDER BY created_at ASC")) {
+            statement.setObject(1, targetId); statement.setTimestamp(2, Timestamp.from(now));
+            try (ResultSet result = statement.executeQuery()) {
+                List<GuildInvite> invites = new ArrayList<>();
+                while (result.next()) invites.add(new GuildInvite(result.getObject(1, UUID.class), result.getObject(2, UUID.class), targetId, result.getObject(3, UUID.class), result.getTimestamp(4).toInstant(), result.getTimestamp(5).toInstant()));
+                return List.copyOf(invites);
+            }
+        } catch (SQLException exception) { throw storage(exception); }
+    }
+
     @Override public void deleteInvite(UUID guildId, UUID targetId) {
         try (PreparedStatement statement = connection().prepareStatement("DELETE FROM smp_guild_invites WHERE guild_id=? AND target_player_id=?")) {
             statement.setObject(1, guildId); statement.setObject(2, targetId); statement.executeUpdate();

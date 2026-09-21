@@ -2,6 +2,8 @@
 # Resolve all sensitive values from the runtime environment or a secret manager. Never commit real secrets.
 config-version: 1
 server:
+  # Stable Control Plane identifier, not the public display name.
+  id: "primary"
   network-name: "Kairu SMP"
   minecraft-target: "26.2"
   java-target: 25

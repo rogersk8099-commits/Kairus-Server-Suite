@@ -1,4 +1,5 @@
-import { ChannelType, type Client, type TextChannel } from "discord.js";
+import { ChannelType, EmbedBuilder, type Client, type TextChannel } from "discord.js";
+import { ControlPlaneApi } from "../api-client.js";
 import type { PrismaClient } from "@prisma/client";
 import type { AppConfig } from "../config.js";
 import type { IdempotencyStore } from "../idempotency.js";
@@ -10,11 +11,14 @@ interface Job { name: string; interval: number; work(): Promise<void>; running: 
 
 export class RuntimeJobs {
   private readonly jobs: Job[];
+  private readonly statusSignatures = new Map<string, string>();
+  private bridgeCursor = new Date().toISOString();
 
   public constructor(
     private readonly database: PrismaClient,
     private readonly client: Client,
-    config: AppConfig,
+    private readonly config: AppConfig,
+    private readonly api: ControlPlaneApi,
     private readonly providers: { youtube: LiveProvider },
     private readonly dedupe: IdempotencyStore,
     private readonly logger: AppLogger
@@ -23,7 +27,8 @@ export class RuntimeJobs {
       { name: "memberships", interval: config.MEMBERSHIP_INTERVAL_MS, work: () => reconcileMemberships(database, client, config.DISCORD_GUILD_ID, logger), running: false },
       { name: "youtube-reconciliation", interval: config.STREAM_INTERVAL_MS, work: () => this.youtubeStreams(config.DISCORD_GUILD_ID), running: false },
       { name: "reminders", interval: config.REMINDER_INTERVAL_MS, work: () => this.reminders(), running: false },
-      { name: "status", interval: config.STATUS_INTERVAL_MS, work: () => this.status(config.DISCORD_GUILD_ID), running: false }
+      { name: "status", interval: config.STATUS_INTERVAL_MS, work: () => this.status(config.DISCORD_GUILD_ID), running: false },
+      { name: "minecraft-events", interval: config.STATUS_INTERVAL_MS, work: () => this.bridgeEvents(config.DISCORD_GUILD_ID), running: false }
     ];
   }
 
@@ -49,6 +54,15 @@ export class RuntimeJobs {
     if (!row) return null;
     const channel = await this.client.channels.fetch(row.discordId).catch(() => null);
     return channel?.type === ChannelType.GuildText ? channel : null;
+  }
+
+  private async mappedChannel(guildId: string, purpose: string, fallbackResource: string): Promise<TextChannel | null> {
+    const configuredId = this.config.DISCORD_CHANNEL_MAPPINGS[purpose];
+    if (configuredId) {
+      const channel = await this.client.channels.fetch(configuredId).catch(() => null);
+      return channel?.type === ChannelType.GuildText ? channel : null;
+    }
+    return this.textResource(guildId, fallbackResource);
   }
 
   private async youtubeStreams(guildId: string): Promise<void> {
@@ -86,10 +100,29 @@ export class RuntimeJobs {
   }
 
   private async status(guildId: string): Promise<void> {
-    const [heartbeat, channel] = await Promise.all([this.database.serverHeartbeat.findFirst({ orderBy: { receivedAt: "desc" } }), this.textResource(guildId, "text-channel.server-status")]);
+    const [{ heartbeat }, channel] = await Promise.all([this.api.get<{ online: boolean; heartbeat: null | { online: boolean; tps: number; playerCount: number; worlds: string[]; version: string; uptimeSeconds: number; receivedAt: string } }>("/api/server/status"), this.mappedChannel(guildId, "SERVER_STATUS", "text-channel.server-status")]);
     if (!heartbeat || !channel) return;
-    const key = `status:${guildId}:${heartbeat.receivedAt.toISOString()}:${heartbeat.online}:${heartbeat.playerCount}`;
-    if (!await this.dedupe.claim(key, 2 * 60 * 60_000)) return;
-    await channel.send({ content: `Minecraft is **${heartbeat.online ? "online" : "offline"}** · ${heartbeat.playerCount} player(s) · TPS ${heartbeat.tps.toFixed(2)} · updated <t:${Math.floor(heartbeat.receivedAt.getTime() / 1_000)}:R>`, allowedMentions: { parse: [] } });
+    const signature = JSON.stringify([heartbeat.online, heartbeat.playerCount, heartbeat.tps.toFixed(2), heartbeat.worlds, heartbeat.version]);
+    if (this.statusSignatures.get(guildId) === signature) return;
+    const updatedAt = Math.floor(new Date(heartbeat.receivedAt).getTime() / 1_000);
+    const state = heartbeat.online ? "🟢 KAIRU SMP ONLINE" : "🔴 KAIRU SMP OFFLINE";
+    const embed = new EmbedBuilder().setColor(heartbeat.online ? 0x57f287 : 0xed4245).setTitle(state)
+      .addFields({ name: "Players", value: String(heartbeat.playerCount), inline: true }, { name: "TPS", value: heartbeat.tps.toFixed(2), inline: true }, { name: "Minecraft", value: heartbeat.version, inline: true }, { name: "Worlds", value: heartbeat.worlds.length ? heartbeat.worlds.map((world) => `• ${world}`).join("\n").slice(0, 1_024) : "None reported" })
+      .setFooter({ text: `Updated <t:${updatedAt}:R>` });
+    const existing = await this.database.discordSetupResource.findUnique({ where: { guildId_resourceKey: { guildId, resourceKey: "message.server-status" } } });
+    const prior = existing ? await channel.messages.fetch(existing.discordId).catch(() => null) : null;
+    const message = prior ? await prior.edit({ embeds: [embed] }) : await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+    await this.database.discordSetupResource.upsert({ where: { guildId_resourceKey: { guildId, resourceKey: "message.server-status" } }, create: { guildId, resourceKey: "message.server-status", resourceType: "message", discordId: message.id }, update: { discordId: message.id, resourceType: "message" } });
+    this.statusSignatures.set(guildId, signature);
+  }
+
+  private async bridgeEvents(guildId: string): Promise<void> {
+    const result = await this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`);
+    if (!result.events.length) return;
+    for (const event of result.events) {
+      const channel = await this.mappedChannel(guildId, event.eventType, "text-channel.game-chat");
+      if (channel) await channel.send({ content: `**${event.eventType.replaceAll("_", " ")}** · ${event.content}`.slice(0, 1_900), allowedMentions: { parse: [] } });
+      if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
+    }
   }
 }

@@ -21,6 +21,7 @@ import gg.neonnexus.smpplatform.phase3.jdbc.JdbcGuildRepository;
 import gg.neonnexus.smpplatform.phase3.jdbc.JdbcPointsRepository;
 import gg.neonnexus.smpplatform.phase3.jdbc.JdbcTransactionRunner;
 import gg.neonnexus.smpplatform.phase3.points.PointsDomain.PointTransaction;
+import gg.neonnexus.smpplatform.phase3.points.PointsDomain.Source;
 import gg.neonnexus.smpplatform.phase3.points.PointsService;
 import gg.neonnexus.smpplatform.phase3.world.NeonWorld;
 import gg.neonnexus.smpplatform.phase3.world.WorldPolicy;
@@ -66,6 +67,8 @@ final class Phase3Runtime implements Listener {
     private final PointsCommandHandler points;
     private final GuildService guildService;
     private final PointsService pointsService;
+    private final String guildCreationCurrency;
+    private final long guildCreationCost;
     private final Map<String, UUID> playersByName = new ConcurrentHashMap<>();
     private final Map<UUID, PendingGuildTransfer> pendingGuildTransfers = new ConcurrentHashMap<>();
     private final PlatformConfiguration.Points.AutomaticReward firstJoinReward;
@@ -73,7 +76,7 @@ final class Phase3Runtime implements Listener {
     private record PendingGuildTransfer(UUID successorId, Instant expiresAt) { }
 
     private Phase3Runtime(JavaPlugin plugin, Executor io, GuildCommandHandler guilds,
-                          PointsCommandHandler points, GuildService guildService, PointsService pointsService, PlatformConfiguration.Points.AutomaticReward firstJoinReward) {
+                          PointsCommandHandler points, GuildService guildService, PointsService pointsService, PlatformConfiguration.Points.AutomaticReward firstJoinReward, PlatformConfiguration.Guilds guildConfiguration) {
         this.plugin = plugin;
         this.io = io;
         this.guilds = guilds;
@@ -81,9 +84,11 @@ final class Phase3Runtime implements Listener {
         this.guildService = guildService;
         this.pointsService = pointsService;
         this.firstJoinReward = firstJoinReward;
+        this.guildCreationCurrency = guildConfiguration.creationCurrency();
+        this.guildCreationCost = guildConfiguration.creationCost();
     }
 
-    static Phase3Runtime start(JavaPlugin plugin, DataSource dataSource, Executor io, Clock clock, PlatformConfiguration.Points.AutomaticReward firstJoinReward) {
+    static Phase3Runtime start(JavaPlugin plugin, DataSource dataSource, Executor io, Clock clock, PlatformConfiguration.Points.AutomaticReward firstJoinReward, PlatformConfiguration.Guilds guildConfiguration) {
         JdbcTransactionRunner transactions = new JdbcTransactionRunner(dataSource);
         OutboxRepository outbox = new JdbcOutboxRepository(dataSource);
         Phase3EventPublisher publisher = new DurablePublisher(outbox, clock);
@@ -96,9 +101,12 @@ final class Phase3Runtime implements Listener {
         PointsService pointsService = new PointsService(
                 new JdbcPointsRepository(transactions), transactions, policy, clock, publisher, audit,
                 false);
-        Phase3Runtime runtime = new Phase3Runtime(plugin, io,
-                new GuildCommandHandler(guildService, directory),
-                new PointsCommandHandler(pointsService, directory), guildService, pointsService, firstJoinReward);
+        Phase3Runtime[] holder = new Phase3Runtime[1];
+        GuildCommandHandler guildCommands = new GuildCommandHandler(guildService, directory,
+                (actor, name, tag, description) -> holder[0].createGuild(actor, name, tag, description));
+        Phase3Runtime runtime = new Phase3Runtime(plugin, io, guildCommands,
+                new PointsCommandHandler(pointsService, directory), guildService, pointsService, firstJoinReward, guildConfiguration);
+        holder[0] = runtime;
         CachedPlayerDirectory.owner = runtime.playersByName;
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
@@ -145,6 +153,7 @@ final class Phase3Runtime implements Listener {
             try {
                 if (view.equals("guild-summary")) guildSummary(actor, result);
                 else if (view.equals("guild-top")) guildTop(result);
+                else if (view.equals("guild-invites")) guildInvites(actor, result);
                 else if (view.equals("points-summary")) pointsSummary(actor, result);
                 else throw new IllegalArgumentException("Unknown client view.");
             } catch (RuntimeException exception) { result.addProperty("error", "Persistent data is currently unavailable."); }
@@ -197,6 +206,7 @@ final class Phase3Runtime implements Listener {
                     case "guild-leave" -> guildService.leave(actor);
                     case "guild-transfer-arm" -> armGuildTransfer(actor, requireTarget(targetId));
                     case "guild-transfer-confirm" -> confirmGuildTransfer(actor, requireTarget(targetId));
+                    case "guild-accept" -> guildService.accept(actor, requireTarget(targetId));
                     default -> throw new IllegalArgumentException("Unknown guild action.");
                 }
                 guildSummary(actor, result);
@@ -208,9 +218,31 @@ final class Phase3Runtime implements Listener {
         });
     }
 
+    /** Decodes only validated client input; all guild and points rules remain in the services. */
+    void clientGuildCreate(Player player, String name, String tag, String description, Consumer<JsonObject> callback) {
+        cache(player.getName(), player.getUniqueId());
+        Actor actor = actor(player);
+        io.execute(() -> {
+            JsonObject result = new JsonObject();
+            try {
+                Guild created = createGuild(actor, name, tag, description);
+                guildSummary(actor, result);
+                result.addProperty("message", "Created " + created.name() + " [" + created.tag() + "] for " + guildCreationCost + " " + guildCreationCurrency + ".");
+            } catch (RuntimeException exception) { result.addProperty("error", safeMessage(exception)); }
+            callback.accept(result);
+        });
+    }
+
     private static UUID requireTarget(UUID targetId) {
         if (targetId == null) throw new IllegalArgumentException("Select a guild member.");
         return targetId;
+    }
+
+    private Guild createGuild(Actor actor, String name, String tag, String description) {
+        return guildService.create(actor, name, tag, description, () -> {
+            if (guildCreationCost > 0) pointsService.spend(actor, actor.playerId(), guildCreationCurrency, guildCreationCost,
+                    Source.GUILD, "Guild creation", Map.of("guildName", name, "guildTag", tag));
+        });
     }
 
     private void armGuildTransfer(Actor actor, UUID successorId) {
@@ -231,6 +263,8 @@ final class Phase3Runtime implements Listener {
     }
 
     private void guildSummary(Actor actor, JsonObject result) {
+        result.addProperty("creationCurrency", guildCreationCurrency);
+        result.addProperty("creationCost", guildCreationCost);
         Guild guild = guildService.byPlayer(actor.playerId()).orElse(null);
         result.addProperty("inGuild", guild != null);
         if (guild == null) return;
@@ -250,9 +284,19 @@ final class Phase3Runtime implements Listener {
         result.add("leaderboard", leaderboard);
     }
 
+    private void guildInvites(Actor actor, JsonObject result) {
+        JsonArray invites = new JsonArray();
+        for (var invite : guildService.invites(actor.playerId())) {
+            Guild guild = guildService.byId(invite.guildId());
+            JsonObject row = new JsonObject(); row.addProperty("guildId", guild.id().toString()); row.addProperty("name", guild.name());
+            row.addProperty("tag", guild.tag()); row.addProperty("expiresAt", invite.expiresAt().toString()); invites.add(row);
+        }
+        result.add("invites", invites);
+    }
+
     private void pointsSummary(Actor actor, JsonObject result) {
         JsonArray balances = new JsonArray();
-        for (String currency : java.util.List.of("NEXUS_POINTS", "HARDCORE_POINTS", "BUILD_POINTS", "EVENT_POINTS", "SEASON_POINTS")) {
+        for (String currency : java.util.List.of("KAIRU_POINTS", "NEXUS_POINTS", "HARDCORE_POINTS", "BUILD_POINTS", "EVENT_POINTS", "SEASON_POINTS")) {
             JsonObject row = new JsonObject(); row.addProperty("currency", currency); row.addProperty("balance", pointsService.balance(actor.playerId(), currency)); balances.add(row);
         }
         result.add("balances", balances);

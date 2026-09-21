@@ -16,6 +16,7 @@ public interface GuildRepository {
     void delete(UUID guildId, long expectedVersion);
     void insertInvite(GuildInvite invite);
     Optional<GuildInvite> findInvite(UUID guildId, UUID targetId, Instant now);
+    List<GuildInvite> findInvitesFor(UUID targetId, Instant now);
     void deleteInvite(UUID guildId, UUID targetId);
     void deleteExpiredInvites(Instant now);
 }

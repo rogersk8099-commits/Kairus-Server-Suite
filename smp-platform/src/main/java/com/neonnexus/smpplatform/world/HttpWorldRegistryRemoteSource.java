@@ -9,11 +9,11 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-/** Production HTTP adapter; API keys come only from the configured environment variable. */
+/** Production HTTP adapter; API keys come from the host environment or protected plugin data-file fallback. */
 public final class HttpWorldRegistryRemoteSource implements WorldRegistryRemoteSource {
     private final HttpClient client; private final URI endpoint; private final String token; private final WorldRegistryJsonCodec codec = new WorldRegistryJsonCodec();
     public HttpWorldRegistryRemoteSource(String baseUrl, String token) {
-        if (token == null || token.isBlank()) throw new IllegalStateException("Central API token environment variable is required when central-api.enabled is true");
+        if (token == null || token.isBlank()) throw new IllegalStateException("Central API token is required when central-api.enabled is true");
         this.client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build(); this.endpoint = URI.create(Objects.requireNonNull(baseUrl).replaceAll("/$", "") + "/v1/minecraft/world-registry"); this.token = token;
     }
     @Override public CompletionStage<RegistryDocument> fetch(long knownRevision) {

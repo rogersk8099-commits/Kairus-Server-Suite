@@ -36,15 +36,19 @@ public final class PlatformConfigurationLoader {
         Path dataFolder = plugin.getDataFolder().toPath().toAbsolutePath().normalize();
         Path passwordFile = dataFolder.resolve(config.getString("storage.password-file", "database-password.txt")).normalize();
         if (!passwordFile.startsWith(dataFolder)) throw new IllegalArgumentException("storage.password-file must remain inside the SMPPlatform data folder");
+        Path centralApiTokenFile = dataFolder.resolve(integrations.getString("integrations.central-api.authentication.token-file", "control-plane-token.txt")).normalize();
+        if (!centralApiTokenFile.startsWith(dataFolder)) throw new IllegalArgumentException("integrations.central-api.authentication.token-file must remain inside the SMPPlatform data folder");
         var database = new PlatformConfiguration.Core.Database(
                 environmentOr(config, "storage.jdbc-url", "SMPPLATFORM_DB_JDBC_URL"), environmentOr(config, "storage.username", "SMPPLATFORM_DB_USERNAME"),
                 "SMPPLATFORM_DB_PASSWORD", passwordFile, positive(config, "storage.hikari.maximum-pool-size"),
                 millis(config, "storage.hikari.connection-timeout-ms"), millis(config, "storage.hikari.validation-timeout-ms"));
         var central = new PlatformConfiguration.Core.CentralApi(
                 integrations.getBoolean("integrations.central-api.enabled"), environmentOr(integrations, "integrations.central-api.base-url", "SMPPLATFORM_API_BASE_URL"),
-                "SMPPLATFORM_API_TOKEN", Duration.ofSeconds(60));
+                "SMPPLATFORM_API_TOKEN", centralApiTokenFile, Duration.ofSeconds(60));
         var async = new PlatformConfiguration.Core.Async(positive(config, "runtime.async.io-threads"), Duration.ofSeconds(15));
-        var core = new PlatformConfiguration.Core(config.getString("server.network-name", "Neon Nexus"), database, central, async,
+        String serverId = config.getString("server.id", "primary").trim();
+        if (!serverId.matches("[A-Za-z0-9_-]{1,128}")) throw new IllegalArgumentException("server.id must contain only letters, numbers, underscores, or hyphens");
+        var core = new PlatformConfiguration.Core(serverId, database, central, async,
                 new PlatformConfiguration.Core.Inventory(config.getBoolean("inventory.share-quarry-with-ashfall", true)));
 
         Map<String, PlatformConfiguration.WorldFile.WorldOverride> overrides = new LinkedHashMap<>();
@@ -54,7 +58,10 @@ public final class PlatformConfigurationLoader {
             overrides.put(id, new PlatformConfiguration.WorldFile.WorldOverride(required(worlds, prefix + ".minecraft-world-name"), worlds.getBoolean(prefix + ".maintenance-mode")));
         }
         var worldFile = new PlatformConfiguration.WorldFile("world-registry-cache.json", 1L, Map.copyOf(overrides));
-        var guildConfig = new PlatformConfiguration.Guilds(guilds.getBoolean("guilds.enabled", true), stringMap(requireSection(guilds, "guilds.world-policy")));
+        String guildCreationCurrency = gg.neonnexus.smpplatform.phase3.points.PointsDomain.requireCurrency(guilds.getString("guilds.guild-create-currency", guilds.getString("guilds.creation-cost.currency", "KAIRU_POINTS")));
+        long guildCreationCost = guilds.contains("guilds.guild-create-cost") ? guilds.getLong("guilds.guild-create-cost") : guilds.getLong("guilds.creation-cost.amount", 500L);
+        if (guildCreationCost < 0) throw new IllegalArgumentException("guilds.creation-cost.amount must not be negative");
+        var guildConfig = new PlatformConfiguration.Guilds(guilds.getBoolean("guilds.enabled", true), stringMap(requireSection(guilds, "guilds.world-policy")), guildCreationCurrency, guildCreationCost);
         var firstJoin = new PlatformConfiguration.Points.AutomaticReward(points.getBoolean("points.automatic-rewards.first-join.enabled", false), points.getString("points.automatic-rewards.first-join.currency", "NEXUS_POINTS"), points.getLong("points.automatic-rewards.first-join.amount", 0L), points.getString("points.automatic-rewards.first-join.reason", "First Kairu SMP join"), points.getStringList("points.automatic-rewards.first-join.worlds"));
         if (firstJoin.enabled() && firstJoin.amount() <= 0) throw new IllegalArgumentException("points.automatic-rewards.first-join.amount must be positive when enabled");
         var pointsConfig = new PlatformConfiguration.Points(points.getBoolean("points.enabled", true), new ArrayList<>(requireSection(points, "points.currencies").getKeys(false)), firstJoin);

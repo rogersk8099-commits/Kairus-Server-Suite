@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.UUID;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 /** Unified SMPPlatform bootstrap. Durable feature services activate only after PostgreSQL is healthy. */
@@ -335,6 +336,11 @@ public final class SMPPlatform extends JavaPlugin {
         Phase3Runtime runtime = phase3;
         if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
         runtime.clientGuildAction(player, action, targetId, callback);
+    }
+    public void clientGuildCreate(Player player, String name, String tag, String description, Consumer<JsonObject> callback) {
+        Phase3Runtime runtime = phase3;
+        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds and points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
+        runtime.clientGuildCreate(player, name, tag, description, callback);
     }
     public void clientPointsView(Player player, String view, String currency, Consumer<JsonObject> callback) {
         Phase3Runtime runtime = phase3;

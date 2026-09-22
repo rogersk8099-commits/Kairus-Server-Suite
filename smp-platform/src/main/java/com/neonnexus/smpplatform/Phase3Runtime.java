@@ -332,6 +332,9 @@ final class Phase3Runtime implements Listener {
 
     private static Actor actor(Player player) {
         Set<String> permissions = new HashSet<>();
+        // Paper operators remain full platform administrators even before a
+        // LuckPerms group has been assigned during first-time server setup.
+        if (player.isOp()) permissions.add("smpplatform.admin");
         for (String permission : ACTOR_PERMISSIONS) {
             if (player.hasPermission(permission)) permissions.add(permission);
         }

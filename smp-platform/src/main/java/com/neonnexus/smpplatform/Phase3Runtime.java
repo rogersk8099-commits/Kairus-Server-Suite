@@ -72,11 +72,12 @@ final class Phase3Runtime implements Listener {
     private final Map<String, UUID> playersByName = new ConcurrentHashMap<>();
     private final Map<UUID, PendingGuildTransfer> pendingGuildTransfers = new ConcurrentHashMap<>();
     private final PlatformConfiguration.Points.AutomaticReward firstJoinReward;
+    private final PlatformConfiguration.Points.AutomaticReward featuredBuildReward;
     private static final Duration GUILD_TRANSFER_CONFIRMATION_TTL = Duration.ofSeconds(30);
     private record PendingGuildTransfer(UUID successorId, Instant expiresAt) { }
 
     private Phase3Runtime(JavaPlugin plugin, Executor io, GuildCommandHandler guilds,
-                          PointsCommandHandler points, GuildService guildService, PointsService pointsService, PlatformConfiguration.Points.AutomaticReward firstJoinReward, PlatformConfiguration.Guilds guildConfiguration) {
+                          PointsCommandHandler points, GuildService guildService, PointsService pointsService, PlatformConfiguration.Points.AutomaticReward firstJoinReward, PlatformConfiguration.Points.AutomaticReward featuredBuildReward, PlatformConfiguration.Guilds guildConfiguration) {
         this.plugin = plugin;
         this.io = io;
         this.guilds = guilds;
@@ -84,11 +85,12 @@ final class Phase3Runtime implements Listener {
         this.guildService = guildService;
         this.pointsService = pointsService;
         this.firstJoinReward = firstJoinReward;
+        this.featuredBuildReward = featuredBuildReward;
         this.guildCreationCurrency = guildConfiguration.creationCurrency();
         this.guildCreationCost = guildConfiguration.creationCost();
     }
 
-    static Phase3Runtime start(JavaPlugin plugin, DataSource dataSource, Executor io, Clock clock, PlatformConfiguration.Points.AutomaticReward firstJoinReward, PlatformConfiguration.Guilds guildConfiguration) {
+    static Phase3Runtime start(JavaPlugin plugin, DataSource dataSource, Executor io, Clock clock, PlatformConfiguration.Points.AutomaticReward firstJoinReward, PlatformConfiguration.Points.AutomaticReward featuredBuildReward, PlatformConfiguration.Guilds guildConfiguration) {
         JdbcTransactionRunner transactions = new JdbcTransactionRunner(dataSource);
         OutboxRepository outbox = new JdbcOutboxRepository(dataSource);
         Phase3EventPublisher publisher = new DurablePublisher(outbox, clock);
@@ -105,7 +107,7 @@ final class Phase3Runtime implements Listener {
         GuildCommandHandler guildCommands = new GuildCommandHandler(guildService, directory,
                 (actor, name, tag, description) -> holder[0].createGuild(actor, name, tag, description));
         Phase3Runtime runtime = new Phase3Runtime(plugin, io, guildCommands,
-                new PointsCommandHandler(pointsService, directory), guildService, pointsService, firstJoinReward, guildConfiguration);
+                new PointsCommandHandler(pointsService, directory), guildService, pointsService, firstJoinReward, featuredBuildReward, guildConfiguration);
         holder[0] = runtime;
         CachedPlayerDirectory.owner = runtime.playersByName;
         plugin.getServer().getScheduler().runTask(plugin, () -> {
@@ -313,6 +315,15 @@ final class Phase3Runtime implements Listener {
                 pointsService.awardOnce(actor, player.getUniqueId(), "first-join-v1", firstJoinReward.currency(), firstJoinReward.amount(), gg.neonnexus.smpplatform.phase3.points.PointsDomain.Source.GAMEPLAY, firstJoinReward.reason(), Map.of("automaticReward", "first-join-v1"));
             } catch (RuntimeException exception) { plugin.getLogger().log(Level.WARNING, "Configured first-join reward was not applied", exception); }
         });
+    }
+
+    /** Durable, idempotent build-point reward; it is intentionally independent from the staff member's current world. */
+    void awardFeaturedBuild(UUID submissionId, UUID recipient) {
+        if (!featuredBuildReward.enabled()) return;
+        Actor system = new Actor(new UUID(0L, 1L), "SMPPlatform", NeonWorld.ATRIUM, Set.of("*"));
+        try {
+            pointsService.awardOnce(system, recipient, "atrium-featured-" + submissionId, featuredBuildReward.currency(), featuredBuildReward.amount(), Source.GAMEPLAY, featuredBuildReward.reason(), Map.of("automaticReward", "featured-build", "submissionId", submissionId.toString()));
+        } catch (RuntimeException exception) { plugin.getLogger().log(Level.WARNING, "Featured build reward was not applied; the feature state was preserved", exception); }
     }
 
     private void cache(String name, UUID id) {

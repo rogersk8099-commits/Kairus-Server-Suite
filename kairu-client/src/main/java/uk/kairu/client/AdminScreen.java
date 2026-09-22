@@ -45,12 +45,12 @@ public final class AdminScreen extends Screen {
             for(int i=0;i<tabs.size();i++) {String tab=tabs.get(i);
                 navButton(layout.sidebar()?x+12:x+12+i*tabW,layout.sidebar()?y+58+i*30:y+47,tabW-4,capitalize(tab),tab.equals(route),()->go(tab));}
             buildEntries();
-            boolean guildCreate=route.equals("guild-create");
-            search=new EditBox(font,layout.contentX(),layout.contentY(),Math.max(20,layout.contentWidth()),20,Component.literal(guildCreate?"Guild name | TAG | optional description":"Search this page"));
-            search.setMaxLength(guildCreate?240:80);search.setValue(query);search.setHint(Component.literal(guildCreate?"Example: Aurora Guild | AUR | Friends welcome":"Search..."));
+            boolean guildCreate=route.equals("guild-create"),buildSubmit=route.equals("build-submit"),typedPlotFlag=route.equals("flag")&&!selectedFlagBoolean;
+            search=new EditBox(font,layout.contentX(),layout.contentY(),Math.max(20,layout.contentWidth()),20,Component.literal(guildCreate?"Guild name | TAG | optional description":buildSubmit?"Build title | optional description":typedPlotFlag?"Enter a PlotSquared value":"Search this page"));
+            search.setMaxLength(guildCreate?240:buildSubmit?2160:typedPlotFlag?120:80);search.setValue(query);search.setHint(Component.literal(guildCreate?"Example: Aurora Guild | AUR | Friends welcome":buildSubmit?"Example: Neon Library | A quiet community build":typedPlotFlag?plotValueHint(selectedFlag):"Search..."));
             search.setResponder(value->{if(!query.equals(value)){query=value;page=0;build();}});addRenderableWidget(search);
             if(focused)setInitialFocus(search);
-            var visible=guildCreate?List.copyOf(entries):entries.stream().filter(e->e.label.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))).toList();
+            var visible=(guildCreate||buildSubmit||typedPlotFlag)?List.copyOf(entries):entries.stream().filter(e->e.label.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))).toList();
             int capacity=layout.pageSize(),maxPage=Math.max(0,(visible.size()-1)/capacity);page=Math.min(page,maxPage);
             int cellW=Math.max(20,(layout.contentWidth()-8*(layout.columns()-1))/layout.columns());
             for(int n=page*capacity;n<Math.min(visible.size(),(page+1)*capacity);n++) {
@@ -79,7 +79,15 @@ public final class AdminScreen extends Screen {
         String encoded=Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         run("guild-create",encoded);go("guilds");
     }
+    private void submitBuildFromForm(){
+        String value=search==null?"":search.getValue().trim();String[] parts=value.split("\\|",2);
+        if(parts.length==0||parts[0].trim().isEmpty()){KairuClient.notice("Use: Build title | optional description");return;}
+        String encoded=Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        run("build-submit",encoded);go("plots");
+    }
     private static String guildCost(JsonObject guild){return guild.has("creationCost")?guild.get("creationCost").getAsLong()+" "+guild.get("creationCurrency").getAsString():"500 KAIRU_POINTS";}
+    private static String plotValueHint(String flag){return switch(flag){case "time"->"0 to 24000";case "gamemode"->"creative, survival, adventure or spectator";case "break","place","use"->"minecraft:chest,minecraft:oak_door";default->"Plain text (up to 120 characters)";};}
+    private void setTypedPlotFlag(){String value=search==null?"":search.getValue().trim();if(value.isEmpty()){KairuClient.notice("Enter a value for this PlotSquared setting.");return;}String flag=Base64.getUrlEncoder().withoutPadding().encodeToString(selectedFlag.getBytes(java.nio.charset.StandardCharsets.UTF_8));String encoded=Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));run("plot-flag-value",flag,encoded);go("flags");}
     private void buildEntries(){
         var s=KairuClient.state;heading=capitalize(route);
         switch(route){
@@ -190,13 +198,14 @@ public final class AdminScreen extends Screen {
             case "plots" -> {
                 if(!s.get("plots").getAsBoolean()){add("Enter "+s.get("plotWorld").getAsString()+" for plots",()->run("status"));return;}
                 for(String a:List.of("info","home","claim","auto"))add("Plot "+a,()->run("plot-"+a));
-                add("Manage members / trusted / denied",()->go("members"));add("Set boolean flags",()->go("flags"));
+                add("Submit current build for review",()->go("build-submit"));add("View featured Atrium builds",()->run("build-showcase"));if(KairuClient.can("creative"))add("Open staff build review queue",()->run("build-review-queue"));add("Manage members / trusted / denied",()->go("members"));add("Set plot settings",()->go("flags"));
             }
+            case "build-submit" -> {heading="Submit Atrium build";add("Enter: Build title | optional description",()->{});add("Submit current claimed plot",this::submitBuildFromForm);add("Back to plot controls",()->go("plots"));}
             case "members" -> s.getAsJsonArray("players").forEach(v->{var p=v.getAsJsonObject();add(p.get("name").getAsString(),()->{
                 target=p.get("id").getAsString();targetName=p.get("name").getAsString();go("member");});});
             case "member" -> {heading="Plot member: "+targetName;for(String a:List.of("add","trust","remove","deny","undeny"))add(a,()->run("plot-"+a,target));add("Back to plots",()->go("plots"));}
-            case "flags" -> {s.getAsJsonArray("flags").forEach(v->{JsonObject flag=v.getAsJsonObject();String name=flag.get("name").getAsString();String type=flag.get("type").getAsString();boolean editable=flag.get("boolean").getAsBoolean();add(name+" ["+type+"]"+(editable?"":" — view only"),()->{selectedFlag=name;selectedFlagType=type;selectedFlagBoolean=editable;go("flag");});});add("Back to plots",()->go("plots"));}
-            case "flag" -> {heading=selectedFlag+" / "+selectedFlagType;if(selectedFlagBoolean){add("Set true",()->run("plot-flag",selectedFlag,"true"));add("Set false",()->run("plot-flag",selectedFlag,"false"));}else add("This flag is listed from PlotSquared; value editing is not available in this menu yet.",()->{});add("Back to flags",()->go("flags"));}
+            case "flags" -> {s.getAsJsonArray("flags").forEach(v->{JsonObject flag=v.getAsJsonObject();String name=flag.get("name").getAsString();String type=flag.get("type").getAsString();String description=flag.get("description").getAsString();boolean editable=flag.get("boolean").getAsBoolean();add(name+" · "+description+" ["+type+"]"+(editable?"":" — view only"),()->{selectedFlag=flag.get("id").getAsString();selectedFlagType=name;selectedFlagBoolean=editable;go("flag");});});add("Back to plots",()->go("plots"));}
+            case "flag" -> {heading=selectedFlagType;if(selectedFlagBoolean){add("Allow",()->run("plot-flag",selectedFlag,"true"));add("Block",()->run("plot-flag",selectedFlag,"false"));add("PlotSquared checks your ownership and permissions before changing this setting.",()->{});}else {add("Enter value above: "+plotValueHint(selectedFlag),()->{});add("Apply value",this::setTypedPlotFlag);add("PlotSquared checks your ownership and permissions before changing this setting.",()->{});}add("Back to flags",()->go("flags"));}
             default -> route=KairuClient.admin()?"overview":"plots";
         }
     }

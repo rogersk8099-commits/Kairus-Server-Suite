@@ -2,6 +2,9 @@ package com.neonnexus.smpplatform;
 
 import com.neonnexus.smpplatform.async.PlatformExecutors;
 import com.neonnexus.smpplatform.atrium.AtriumPlotFlagsMenu;
+import com.neonnexus.smpplatform.atrium.AtriumReviewMenu;
+import com.neonnexus.smpplatform.atrium.AtriumShowcaseMenu;
+import com.neonnexus.smpplatform.atrium.AtriumSubmissionService;
 import com.neonnexus.smpplatform.client.KairuClientGateway;
 import com.neonnexus.smpplatform.config.PlatformConfiguration;
 import com.neonnexus.smpplatform.config.PlatformConfigurationLoader;
@@ -60,6 +63,9 @@ public final class SMPPlatform extends JavaPlugin {
     private OutboxDispatcher outbox;
     private MultiverseWorldAdapter multiverse;
     private volatile Phase3Runtime phase3;
+    private volatile AtriumSubmissionService atriumSubmissions;
+    private AtriumReviewMenu atriumReviewMenu;
+    private AtriumShowcaseMenu atriumShowcaseMenu;
     private KairuClientGateway clientGateway;
     private volatile String centralApiToken;
     private Instant startedAt;
@@ -75,6 +81,10 @@ public final class SMPPlatform extends JavaPlugin {
             configuration.core().inventory().policy().groupsFor(registry.snapshot().worlds().values());
             multiverse = new MultiverseWorldAdapter(getServer().getPluginManager(), getLogger());
             clientGateway = new KairuClientGateway(this);
+            atriumReviewMenu = new AtriumReviewMenu(this);
+            getServer().getPluginManager().registerEvents(atriumReviewMenu, this);
+            atriumShowcaseMenu = new AtriumShowcaseMenu(this);
+            getServer().getPluginManager().registerEvents(atriumShowcaseMenu, this);
             MultiverseInventoryAdapter inventories = new MultiverseInventoryAdapter(getServer().getPluginManager(), getLogger());
             inventories.validateDesiredGroups(registry.snapshot().worlds().values(), configuration.core().inventory().policy());
             FloodgateIdentityAdapter identities = FloodgateIdentityAdapter.discover(getServer().getPluginManager(), getLogger());
@@ -97,7 +107,8 @@ public final class SMPPlatform extends JavaPlugin {
     private void startDatabaseServicesAsync() {
         database.start();
         if (!database.isAvailable()) return;
-        phase3 = Phase3Runtime.start(this, database.requireDataSource(), executors.io(), Clock.systemUTC(), configuration.points().firstJoinReward(), configuration.guilds());
+        phase3 = Phase3Runtime.start(this, database.requireDataSource(), executors.io(), Clock.systemUTC(), configuration.points().firstJoinReward(), configuration.points().featuredBuildReward(), configuration.guilds());
+        atriumSubmissions = new AtriumSubmissionService(database.requireDataSource(), registry.require("atrium").minecraftWorldName());
         getLogger().info("Durable guild and points modules are active.");
         if (configuration.core().centralApi().enabled() && configuration.integrations().outbox().enabled()) {
             try {
@@ -218,12 +229,75 @@ public final class SMPPlatform extends JavaPlugin {
         }
         if (name.equals("plotflags")) {
             if (!(sender instanceof org.bukkit.entity.Player player)) { sender.sendMessage("Open plot settings in-game."); return true; }
-            if (!player.getWorld().getName().equalsIgnoreCase("atrium")) { player.sendMessage("§cThe Atrium plot settings guide is available only in The Atrium."); return true; }
+            if (!isAtriumWorld(player.getWorld())) { player.sendMessage("§cThe Atrium plot settings guide is available only in The Atrium."); return true; }
             AtriumPlotFlagsMenu.open(player);
             return true;
         }
+        if (name.equals("build")) return build(sender, args);
         sender.sendMessage("§cThis SMPPlatform module is not active because its required production adapter is unavailable.");
         return true;
+    }
+
+    /** Plot authority is verified on the main thread; PostgreSQL work is then performed asynchronously. */
+    private boolean build(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) { sender.sendMessage("§cAtrium build commands must be run in-game."); return true; }
+        AtriumSubmissionService submissions = atriumSubmissions;
+        if (submissions == null) { player.sendMessage("§cBuild submissions require a healthy PostgreSQL connection. No submission was created."); return true; }
+        if (args.length == 0) { player.sendMessage("§d/build submit <title> [description] §7— submit your current claimed Atrium plot."); if (player.hasPermission("smpplatform.admin.creative")) player.sendMessage("§d/build review <submission-id> <under_review|featured|rejected|archived> <note>"); return true; }
+        if (args[0].equalsIgnoreCase("featured")) { openAtriumShowcase(player); return true; }
+        if (args[0].equalsIgnoreCase("submit")) {
+            if (args.length < 2) { player.sendMessage("§cUsage: /build submit <title> [description]"); return true; }
+            String title = args[1]; String description = args.length > 2 ? String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)) : title;
+            try { submitAtriumBuild(player, title, description); }
+            catch (IllegalArgumentException exception) { player.sendMessage("§c" + exception.getMessage()); }
+            return true;
+        }
+        if (args[0].equalsIgnoreCase("review")) {
+            if (!player.hasPermission("smpplatform.admin.creative")) { player.sendMessage("§cYou do not have permission to review Atrium submissions."); return true; }
+            if (args.length == 1) { atriumReviewMenu.openQueue(player); return true; }
+            if (args.length < 4) { player.sendMessage("§cUsage: /build review <submission-id> <under_review|featured|rejected|archived> <note>"); return true; }
+            final UUID submissionId;
+            try { submissionId = UUID.fromString(args[1]); } catch (IllegalArgumentException exception) { player.sendMessage("§cSubmission ID must be a UUID."); return true; }
+            String state = args[2]; String note = String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length)); UUID playerId = player.getUniqueId();
+            player.sendMessage("§dSaving build review…");
+            executors.io().execute(() -> {
+                try {
+                    AtriumSubmissionService.Submission reviewed = reviewAtriumBuild(playerId, submissionId, state, note);
+                    Bukkit.getScheduler().runTask(this, () -> { Player online = Bukkit.getPlayer(playerId); if (online != null) { online.sendMessage("§aBuild review saved: §f" + reviewed.title() + " §7→ §f" + reviewed.state()); publishBridgeEvent("BUILD_" + reviewed.state(), "atrium", online, "Build review: " + reviewed.title(), java.util.Map.of("submissionId", reviewed.id().toString(), "state", reviewed.state())); } });
+                } catch (RuntimeException exception) { Bukkit.getScheduler().runTask(this, () -> { Player online = Bukkit.getPlayer(playerId); if (online != null) online.sendMessage("§cBuild review failed: " + rootMessage(exception)); }); }
+            });
+            return true;
+        }
+        player.sendMessage("§cUnknown build command. Use /build."); return true;
+    }
+
+    private static String rootMessage(Throwable error) { Throwable current = error; while (current.getCause() != null) current = current.getCause(); String message = current.getMessage(); return message == null || message.isBlank() ? "database error" : message; }
+
+    /** Entry point used by both /build and the optional Fabric menu; the server still verifies PlotSquared authority. */
+    public String submitAtriumBuild(Player player, String title, String description) {
+        AtriumSubmissionService submissions = atriumSubmissions;
+        if (submissions == null) throw new IllegalArgumentException("Build submissions require a healthy PostgreSQL connection. No submission was created.");
+        AtriumSubmissionService.SubmissionContext context = submissions.verifyCurrentPlot(player);
+        String effectiveDescription = description == null || description.isBlank() ? title : description;
+        UUID playerId = player.getUniqueId(); String playerWorld = player.getWorld().getName();
+        player.sendMessage("§dSaving your Atrium build submission…");
+        executors.io().execute(() -> {
+            try {
+                AtriumSubmissionService.Submission saved = submissions.submit(context, title, effectiveDescription);
+                Bukkit.getScheduler().runTask(this, () -> { Player online = Bukkit.getPlayer(playerId); if (online != null) { online.sendMessage("§aBuild submitted for review: §f" + saved.title() + " §7(" + saved.id() + ")"); publishBridgeEvent("BUILD_SUBMITTED", playerWorld, online, "Build submitted: " + saved.title(), java.util.Map.of("submissionId", saved.id().toString(), "plotId", saved.plotId())); } });
+            } catch (RuntimeException exception) { Bukkit.getScheduler().runTask(this, () -> { Player online = Bukkit.getPlayer(playerId); if (online != null) online.sendMessage("§cBuild submission failed: " + rootMessage(exception)); }); }
+        });
+        return "Build submission sent. The server will confirm when it is saved.";
+    }
+
+    /** Must run on the IO executor. Feature rewards use a durable per-submission idempotency key. */
+    public AtriumSubmissionService.Submission reviewAtriumBuild(UUID staffId, UUID submissionId, String state, String note) {
+        AtriumSubmissionService service = atriumSubmissions;
+        if (service == null) throw new IllegalStateException("Build reviews require a healthy PostgreSQL connection.");
+        UUID submitter = service.submitterId(submissionId);
+        AtriumSubmissionService.Submission reviewed = service.review(staffId, submissionId, state, note);
+        if (reviewed.state().equals("FEATURED")) awardFeaturedBuild(submissionId, submitter);
+        return reviewed;
     }
 
     /** Completes a Discord-issued, single-use linking code without exposing the Control Plane credential to players. */
@@ -295,15 +369,27 @@ public final class SMPPlatform extends JavaPlugin {
         World hub = Bukkit.getWorld("spawn-hub");
         if (hub != null) applySpawnHubPolicy(hub);
         sender.sendMessage("§aSetup applied. Spawn Hub policy is active; existing worlds were preserved.");
-        sender.sendMessage("§7PlotSquared: verify Atrium uses the PlotSquared generator before building. LuckPerms groups remain administrator-managed.");
+        sender.sendMessage("§7Atrium is created only as a superflat PlotSquared world. An existing Atrium is never converted or replaced.");
         return true;
     }
 
     private void createSetupWorld(WorldDefinition definition, CommandSender sender) {
         try {
-            if (definition.id().equals("atrium") && multiverse != null && multiverse.available()) {
-                boolean accepted = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv create atrium normal -g PlotSquared");
-                if (accepted && Bukkit.getWorld("atrium") != null) { sender.sendMessage("§a   Created The Atrium with PlotSquared generator."); return; }
+            if (definition.id().equals("atrium")) {
+                if (!definition.minecraftWorldName().equalsIgnoreCase("atrium") && Bukkit.getWorld("atrium") != null) {
+                    sender.sendMessage("§e   Legacy world 'atrium' is loaded. It was not replaced and no duplicate nx_atrium world was created.");
+                    sender.sendMessage("§7   Back up and remove the old world deliberately before recreating The Atrium.");
+                    return;
+                }
+                if (multiverse == null || !multiverse.available() || Bukkit.getPluginManager().getPlugin("PlotSquared") == null) {
+                    sender.sendMessage("§c   The Atrium requires both Multiverse-Core and PlotSquared; it was not created as a normal world.");
+                    return;
+                }
+                String worldName = definition.minecraftWorldName();
+                boolean accepted = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv create " + worldName + " normal --world-type flat -g PlotSquared");
+                if (accepted && Bukkit.getWorld(worldName) != null) { sender.sendMessage("§a   Created The Atrium as a superflat PlotSquared world (128x128 plots). "); return; }
+                sender.sendMessage("§c   PlotSquared did not create The Atrium. Check /mv generators and the server log; no normal fallback was used.");
+                return;
             }
             WorldCreator creator = new WorldCreator(definition.minecraftWorldName());
             if (definition.id().equals("spawn-hub")) creator.type(WorldType.FLAT);
@@ -314,6 +400,11 @@ public final class SMPPlatform extends JavaPlugin {
             getLogger().warning("Setup could not create " + definition.id() + ": " + exception.getMessage());
             sender.sendMessage("§c   Could not create " + definition.displayName() + "; see console.");
         }
+    }
+
+    private boolean isAtriumWorld(World world) {
+        if (registry == null || world == null) return false;
+        return registry.find("atrium").map(definition -> definition.minecraftWorldName().equalsIgnoreCase(world.getName())).orElse(false);
     }
 
     @SuppressWarnings("removal")
@@ -327,6 +418,11 @@ public final class SMPPlatform extends JavaPlugin {
 
     public WorldRegistry worldRegistry() { return registry; }
     public MultiverseWorldAdapter multiverse() { return multiverse; }
+    public AtriumSubmissionService atriumSubmissionService() { return atriumSubmissions; }
+    public java.util.concurrent.ExecutorService io() { return executors.io(); }
+    public void openAtriumReviewQueue(Player player) { if (atriumReviewMenu != null) atriumReviewMenu.openQueue(player); }
+    public void openAtriumShowcase(Player player) { if (atriumShowcaseMenu != null) atriumShowcaseMenu.open(player); }
+    public void awardFeaturedBuild(UUID submissionId, UUID recipient) { Phase3Runtime runtime = phase3; if (runtime != null) runtime.awardFeaturedBuild(submissionId, recipient); }
     public void clientView(Player player, String view, Consumer<JsonObject> callback) {
         Phase3Runtime runtime = phase3;
         if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds and points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }

@@ -101,6 +101,7 @@ worlds:
     maintenance-mode: false
   atrium:
     id: atrium
+    # Dedicated PlotSquared world. Setup never renames or replaces an existing world.
     minecraft-world-name: nx_atrium
     display-name: "The Atrium"
     public-type: "Creative"

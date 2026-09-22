@@ -21,7 +21,10 @@ repositories {
 }
 
 dependencies {
+    implementation(platform("com.intellectualsites.bom:bom-newest:1.56"))
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
+    compileOnly("com.intellectualsites.plotsquared:plotsquared-core")
+    compileOnly("com.intellectualsites.plotsquared:plotsquared-bukkit") { isTransitive = false }
     compileOnly("me.clip:placeholderapi:2.11.6")
     compileOnly("com.github.SkriptLang:Skript:2.10.0")
     implementation("com.zaxxer:HikariCP:6.2.1")

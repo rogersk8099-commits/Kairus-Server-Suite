@@ -59,6 +59,14 @@ public final class KairuClientGateway {
             }));
             return true;
         }
+        if (action.equals("build-submit")) {
+            String[] values = decodeBuildSubmit(require(args, 2, "Enter a build title."));
+            String message;
+            try { message = plugin.submitAtriumBuild(player, values[0], values[1]); }
+            catch (IllegalArgumentException exception) { message = exception.getMessage(); }
+            reply(player, requestId, message, null, null);
+            return true;
+        }
         if (List.of("guild-invite", "guild-kick", "guild-promote", "guild-demote", "guild-leave", "guild-transfer-arm", "guild-transfer-confirm", "guild-accept").contains(action)) {
             UUID target = action.equals("guild-leave") ? null : requireUuid(args, 2);
             plugin.clientGuildAction(player, action, target, data -> Bukkit.getScheduler().runTask(plugin, () -> {
@@ -82,6 +90,16 @@ public final class KairuClientGateway {
         } catch (IllegalArgumentException exception) { throw new IllegalArgumentException("Enter a guild name and tag in the required format."); }
     }
 
+    /** Only simple text is passed back into the Bukkit command parser; /build repeats all authority checks. */
+    private static String[] decodeBuildSubmit(String encoded) {
+        try {
+            String[] values = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8).split("\\|", 2);
+            String title = values[0].trim(); String description = values.length == 2 ? values[1].trim() : "";
+            if (!title.matches("[A-Za-z0-9 .,!?()'_-]{1,80}") || (!description.isBlank() && !description.matches("[A-Za-z0-9 .,!?()'_-]{1,2000}"))) throw new IllegalArgumentException();
+            return new String[] { title, description };
+        } catch (IllegalArgumentException exception) { throw new IllegalArgumentException("Use a plain build title and optional plain description (letters, numbers and basic punctuation). "); }
+    }
+
     private String perform(Player actor, String action, String[] args) {
         return switch (action) {
             case "status" -> "SMPPlatform connected.";
@@ -95,8 +113,56 @@ public final class KairuClientGateway {
             case "world-load" -> worldLoad(actor, require(args, 2, "Choose a world."));
             case "world-unload-arm" -> armWorldUnload(actor, require(args, 2, "Choose a world."));
             case "world-unload-confirm" -> confirmWorldUnload(actor, require(args, 2, "Choose a world."));
+            case "plot-flag" -> plotBooleanFlag(actor, require(args, 2, "Choose a PlotSquared setting."), require(args, 3, "Choose a value."));
+            case "plot-flag-value" -> plotTypedFlag(actor, decodeValue(require(args, 2, "Choose a PlotSquared setting.")), decodeValue(require(args, 3, "Enter a value.")));
+            case "build-review-queue" -> { plugin.openAtriumReviewQueue(actor); yield "Opening the Atrium review queue."; }
+            case "build-showcase" -> { plugin.openAtriumShowcase(actor); yield "Opening featured Atrium builds."; }
             default -> "This SMPPlatform action is not available in the client yet.";
         };
+    }
+
+    /** Delegates the final permission/plot-ownership decision to PlotSquared as the player. */
+    private String plotBooleanFlag(Player player, String flagId, String value) {
+        if (!List.of("pvp", "explosion", "fly", "redstone", "untrusted-visit", "block-burn", "block-ignition").contains(flagId) || !(value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false"))) {
+            throw new IllegalArgumentException("That PlotSquared switch is not supported by this menu.");
+        }
+        return applyPlotFlag(player, flagId, value.toLowerCase(Locale.ROOT));
+    }
+
+    private String plotTypedFlag(Player player, String flagId, String value) {
+        String normalized = value.trim();
+        switch (flagId) {
+            case "time" -> {
+                if (!normalized.matches("[0-9]{1,5}") || Integer.parseInt(normalized) > 24000) throw new IllegalArgumentException("Plot time must be a number from 0 to 24000.");
+            }
+            case "gamemode" -> {
+                normalized = normalized.toLowerCase(Locale.ROOT);
+                if (!List.of("survival", "creative", "adventure", "spectator").contains(normalized)) throw new IllegalArgumentException("Plot gamemode must be survival, creative, adventure, or spectator.");
+            }
+            case "greeting", "farewell" -> {
+                if (normalized.isBlank() || normalized.length() > 120 || !normalized.matches("[A-Za-z0-9 .,!?()'_-]+")) throw new IllegalArgumentException("Messages may be 1-120 plain characters.");
+            }
+            case "break", "place", "use" -> {
+                if (!normalized.matches("(?:minecraft:)?[a-z0-9_]+(?:,(?:minecraft:)?[a-z0-9_]+){0,31}")) throw new IllegalArgumentException("Use a comma-separated material list, for example minecraft:chest,minecraft:oak_door.");
+            }
+            default -> throw new IllegalArgumentException("That typed PlotSquared setting is not supported by this menu.");
+        }
+        return applyPlotFlag(player, flagId, normalized);
+    }
+
+    private String applyPlotFlag(Player player, String flagId, String value) {
+        boolean inAtrium = plugin.worldRegistry().find("atrium").map(definition -> definition.minecraftWorldName().equalsIgnoreCase(player.getWorld().getName())).orElse(false);
+        if (!inAtrium) throw new IllegalArgumentException("Plot settings are available only in The Atrium.");
+        if (Bukkit.getPluginManager().getPlugin("PlotSquared") == null) throw new IllegalArgumentException("PlotSquared is not available on this server.");
+        if (!flagId.matches("[a-z0-9_-]{1,64}")) throw new IllegalArgumentException("That PlotSquared setting is not valid.");
+        if (!value.matches("[A-Za-z0-9_.,:+-]{1,96}")) throw new IllegalArgumentException("That setting value contains unsupported characters.");
+        if (!player.performCommand("plot flag set " + flagId + " " + value)) throw new IllegalArgumentException("PlotSquared did not accept that setting. Check your plot ownership and permissions.");
+        return "PlotSquared received the " + flagId + " setting.";
+    }
+
+    private static String decodeValue(String encoded) {
+        try { return new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8); }
+        catch (IllegalArgumentException exception) { throw new IllegalArgumentException("The setting value could not be read."); }
     }
 
     private String travel(Player player, String id) {
@@ -229,10 +295,11 @@ public final class KairuClientGateway {
     private void reply(Player player, String id, String message, String view, JsonObject viewData) {
         JsonObject state = new JsonObject();
         state.addProperty("id", id); state.addProperty("authorized", true); state.addProperty("message", message);
-        state.addProperty("admin", isAdmin(player)); state.addProperty("plots", player.getWorld().getName().equalsIgnoreCase("atrium")); state.addProperty("plotWorld", "The Atrium");
+        boolean inAtrium = plugin.worldRegistry().find("atrium").map(definition -> definition.minecraftWorldName().equalsIgnoreCase(player.getWorld().getName())).orElse(false);
+        state.addProperty("admin", isAdmin(player)); state.addProperty("plots", inAtrium); state.addProperty("plotWorld", "The Atrium");
         state.addProperty("online", Bukkit.getOnlinePlayers().size()); state.addProperty("tps", Bukkit.getTPS()[0]);
         JsonArray permissions = new JsonArray();
-        for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events")) if (permits(player, action)) permissions.add(action);
+        for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events", "creative")) if (permits(player, action)) permissions.add(action);
         state.add("permissions", permissions); state.add("players", players()); state.add("worlds", worlds()); state.add("travelWorlds", travelWorlds(player)); state.add("flags", readableFlags());
         if (view != null && viewData != null) state.add(switch (view) { case "guild-summary" -> "guild"; case "points-summary" -> "points"; default -> view; }, viewData);
         player.sendMessage(PREFIX + state);
@@ -241,8 +308,25 @@ public final class KairuClientGateway {
     private JsonArray players() { JsonArray rows = new JsonArray(); for (Player player : Bukkit.getOnlinePlayers()) { JsonObject row = new JsonObject(); row.addProperty("id", player.getUniqueId().toString()); row.addProperty("name", player.getName()); row.addProperty("world", player.getWorld().getName()); rows.add(row); } return rows; }
     private JsonArray worlds() { JsonArray rows = new JsonArray(); for (WorldDefinition world : plugin.worldRegistry().snapshot().worlds().values()) { JsonObject row = new JsonObject(); row.addProperty("id", world.id()); row.addProperty("name", world.displayName()); row.addProperty("status", world.status().name()); row.addProperty("maintenance", world.maintenanceMode()); row.addProperty("loaded", Bukkit.getWorld(world.minecraftWorldName()) != null); rows.add(row); } return rows; }
     private JsonArray travelWorlds(Player player) { JsonArray rows = new JsonArray(); for (WorldDefinition world : plugin.worldRegistry().snapshot().worlds().values()) if (world.isAvailableForPlayers() && (player.hasPermission(world.accessPermission()) || isAdmin(player))) { JsonObject row = new JsonObject(); row.addProperty("id", world.id()); row.addProperty("name", world.displayName()); rows.add(row); } return rows; }
-    private static JsonArray readableFlags() { JsonArray rows = new JsonArray(); flag(rows, "Building access", "Visitors can place or break blocks", "Building", false); flag(rows, "Containers & doors", "Visitors can use chests, doors and buttons", "Interaction", false); flag(rows, "Player combat", "Players can damage one another", "Combat", false); flag(rows, "Explosions", "Explosions can affect the plot", "Safety", false); flag(rows, "Mob spawning", "Mobs can spawn in the plot", "Mobs", false); flag(rows, "Fire spread", "Fire can spread between blocks", "Safety", false); return rows; }
-    private static void flag(JsonArray rows, String name, String description, String type, boolean editable) { JsonObject row = new JsonObject(); row.addProperty("name", name); row.addProperty("description", description); row.addProperty("type", type); row.addProperty("boolean", editable); rows.add(row); }
+    private static JsonArray readableFlags() {
+        JsonArray rows = new JsonArray();
+        flag(rows, "break", "Guest block breaking", "A material list that permits guests to break selected blocks.", "Materials", false);
+        flag(rows, "place", "Guest block placing", "A material list that permits guests to place selected blocks.", "Materials", false);
+        flag(rows, "use", "Containers & doors", "A material list that permits guests to use selected blocks.", "Materials", false);
+        flag(rows, "pvp", "Player combat", "Allow or block players damaging one another in this plot.", "Combat", true);
+        flag(rows, "explosion", "Explosions", "Allow or block explosions inside this plot.", "Safety", true);
+        flag(rows, "fly", "Flight", "Allow or block flight while a player is inside this plot.", "Movement", true);
+        flag(rows, "redstone", "Redstone", "Allow or block redstone behaviour inside this plot.", "Interaction", true);
+        flag(rows, "untrusted-visit", "Guest visits", "Allow or block visitors who are not plot members.", "Access", true);
+        flag(rows, "block-burn", "Block burning", "Allow or block blocks burning in this plot.", "Safety", true);
+        flag(rows, "block-ignition", "Block ignition", "Allow or block blocks being set on fire in this plot.", "Safety", true);
+        flag(rows, "greeting", "Welcome message", "Text shown when a player enters the plot.", "Text", false);
+        flag(rows, "farewell", "Goodbye message", "Text shown when a player leaves the plot.", "Text", false);
+        flag(rows, "time", "Local plot time", "A numeric simulated time for the plot.", "Number", false);
+        flag(rows, "gamemode", "Plot gamemode", "The gamemode applied while inside the plot.", "Choice", false);
+        return rows;
+    }
+    private static void flag(JsonArray rows, String id, String name, String description, String type, boolean editable) { JsonObject row = new JsonObject(); row.addProperty("id", id); row.addProperty("name", name); row.addProperty("description", description); row.addProperty("type", type); row.addProperty("boolean", editable); rows.add(row); }
     private boolean permits(Player player, String action) { return isAdmin(player) && player.hasPermission("smpplatform.admin." + action); }
     private static boolean isAdmin(Player player) { return player.isOp() || player.hasPermission("smpplatform.admin"); }
     private static void requirePermission(Player player, String permission) { if (!player.isOp() && !player.hasPermission(permission)) throw new IllegalArgumentException("You do not have permission for that action."); }

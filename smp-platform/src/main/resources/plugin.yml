@@ -54,6 +54,7 @@ permissions:
   smpplatform.points.view: {default: true}
   smpplatform.events.use: {default: true}
   smpplatform.creative.use: {default: true}
+  smpplatform.creative.submit: {default: true}
   smpplatform.admin: {default: op}
   smpplatform.admin.setup: {default: op}
   smpplatform.admin.players: {default: op}

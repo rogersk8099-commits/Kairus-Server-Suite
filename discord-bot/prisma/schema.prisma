@@ -57,12 +57,14 @@ model LinkCode {
 }
 
 model PlayerLink {
-  discordUserId String   @id @map("discord_user_id")
+  discordUserId String   @map("discord_user_id")
   minecraftUuid String   @unique @map("minecraft_uuid") @db.Uuid
   javaUsername  String   @map("java_username")
   bedrockXuid   String?  @unique @map("bedrock_xuid")
   linkedAt      DateTime @default(now()) @map("linked_at") @db.Timestamptz(6)
+  isPrimary     Boolean  @default(false) @map("is_primary")
 
+  @@id([discordUserId, minecraftUuid])
   @@map("player_links")
 }
 

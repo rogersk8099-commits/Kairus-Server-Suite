@@ -71,8 +71,11 @@ function services(): CommandServices {
     logger: { error: vi.fn(), warn: vi.fn() },
     links: {
       getLinkByDiscordUser: vi.fn().mockResolvedValue(null),
+      getLinksByDiscordUser: vi.fn().mockResolvedValue([]),
       createLinkCode: vi.fn().mockResolvedValue({ code: "SAFE_LINK_CODE_123456", expiresAt: "2030-01-01T00:00:00.000Z" }),
-      unlinkDiscordUser: vi.fn().mockResolvedValue(true)
+      unlinkDiscordUser: vi.fn().mockResolvedValue(true),
+      unlinkMinecraftAccount: vi.fn().mockResolvedValue(true),
+      setPrimaryMinecraftAccount: vi.fn().mockResolvedValue(true)
     },
     players: {
       getPlayerByMinecraftUuid: vi.fn().mockResolvedValue(null),
@@ -102,7 +105,7 @@ function services(): CommandServices {
 describe("modular Discord commands", () => {
   it("exports all requested individually registerable command definitions", () => {
     expect(slashCommandDefinitions.map((command) => command.name)).toEqual([
-      "link-minecraft", "unlink-minecraft", "profile", "server-status", "online", "player",
+      "link-minecraft", "unlink-minecraft", "minecraft-accounts", "primary-minecraft", "profile", "server-status", "online", "player",
       "sync-roles", "sync-memberships", "maintenance", "announce", "config"
     ]);
     expect(slashCommandDefinitions.every((command) => command.dm_permission === false)).toBe(true);
@@ -148,21 +151,21 @@ describe("modular Discord commands", () => {
   it("presents unlink confirmation and rejects a different user pressing the button", async () => {
     const input = interaction("unlink-minecraft");
     const api = services();
-    vi.mocked(api.links.getLinkByDiscordUser).mockResolvedValue({ discordUserId: actor.id, minecraftUuid: "123e4567-e89b-42d3-a456-426614174000", minecraftUsername: "Alex", linkedAt: "2030-01-01T00:00:00.000Z" });
+    vi.mocked(api.links.getLinksByDiscordUser).mockResolvedValue([{ discordUserId: actor.id, minecraftUuid: "123e4567-e89b-42d3-a456-426614174000", minecraftUsername: "Alex", linkedAt: "2030-01-01T00:00:00.000Z", isPrimary: true }]);
     await dispatchCommand(input, api);
     const customId = input.replies[0].components?.[0].components[0].custom_id!;
-    expect(customId).toBe(`kairu:unlink:confirm:${actor.id}`);
+    expect(customId).toBe(`kairu:unlink:confirm:${actor.id}:123e4567-e89b-42d3-a456-426614174000`);
     const intruder = component(customId, member);
     await dispatchComponent(intruder, api);
-    expect(api.links.unlinkDiscordUser).not.toHaveBeenCalled();
+    expect(api.links.unlinkMinecraftAccount).not.toHaveBeenCalled();
     expect(intruder.replies[0].content).toContain("Only the member");
   });
 
   it("confirms an unlink only for its owner and calls the unlink service", async () => {
     const api = services();
-    const confirmation = component(`kairu:unlink:confirm:${actor.id}`);
+    const confirmation = component(`kairu:unlink:confirm:${actor.id}:123e4567-e89b-42d3-a456-426614174000`);
     await dispatchComponent(confirmation, api);
-    expect(api.links.unlinkDiscordUser).toHaveBeenCalledWith(actor.id);
+    expect(api.links.unlinkMinecraftAccount).toHaveBeenCalledWith(actor.id, "123e4567-e89b-42d3-a456-426614174000");
     expect(confirmation.updates[0].content).toContain("has been removed");
   });
 

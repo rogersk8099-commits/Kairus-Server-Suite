@@ -11,7 +11,7 @@ import { staffCommands } from "./staff-commands.js";
 import { respondServiceFailure } from "./utils.js";
 
 /** All modules are standalone exports as well as members of this convenience registry. */
-export { linkMinecraftCommand, unlinkMinecraftCommand, profileCommand, serverStatusCommand, onlineCommand, playerCommand, playerCommands } from "./player-commands.js";
+export { linkMinecraftCommand, unlinkMinecraftCommand, minecraftAccountsCommand, primaryMinecraftCommand, profileCommand, serverStatusCommand, onlineCommand, playerCommand, playerCommands } from "./player-commands.js";
 export { syncRolesCommand, syncMembershipsCommand, maintenanceCommand, announceCommand, configCommand, staffCommands } from "./staff-commands.js";
 export * from "./interfaces.js";
 

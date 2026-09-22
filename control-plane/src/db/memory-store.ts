@@ -25,7 +25,7 @@ export class MemoryStore implements ControlPlaneStore {
   private heartbeat: ServerHeartbeat | null = null;
   private readonly snapshots = new Map<string, PlayerSnapshot>();
   private readonly codes = new Map<string, StoredLinkCode>();
-  private readonly linksByDiscord = new Map<string, PlayerLink>();
+  private readonly linksByDiscord = new Map<string, PlayerLink[]>();
   private readonly linksByMinecraft = new Map<string, PlayerLink>();
   private readonly linksByXuid = new Map<string, PlayerLink>();
   private readonly commands = new Map<string, PluginCommand>();
@@ -76,7 +76,7 @@ export class MemoryStore implements ControlPlaneStore {
   async completeLinkCode(codeHash: string, identity: LinkIdentity): Promise<LinkCodeResult> {
     const code = this.codes.get(codeHash);
     if (!code || code.consumedAt || code.expiresAt <= new Date()) return { ok: false, reason: "invalid_or_expired" };
-    if (this.linksByDiscord.has(code.discordUserId) || this.linksByMinecraft.has(identity.minecraftUuid) || (identity.bedrockXuid && this.linksByXuid.has(identity.bedrockXuid))) {
+    if (this.linksByMinecraft.has(identity.minecraftUuid) || (identity.bedrockXuid && this.linksByXuid.has(identity.bedrockXuid))) {
       return { ok: false, reason: "identity_already_linked" };
     }
     const link: PlayerLink = {
@@ -84,27 +84,29 @@ export class MemoryStore implements ControlPlaneStore {
       minecraftUuid: identity.minecraftUuid,
       javaUsername: identity.javaUsername,
       bedrockXuid: identity.bedrockXuid ?? null,
+      isPrimary: (this.linksByDiscord.get(code.discordUserId)?.length ?? 0) === 0,
       linkedAt: new Date().toISOString()
     };
     code.consumedAt = new Date();
-    this.linksByDiscord.set(link.discordUserId, link);
+    this.linksByDiscord.set(link.discordUserId, [...(this.linksByDiscord.get(link.discordUserId) ?? []), link]);
     this.linksByMinecraft.set(link.minecraftUuid, link);
     if (link.bedrockXuid) this.linksByXuid.set(link.bedrockXuid, link);
     return { ok: true, link: { ...link } };
   }
 
   async getLinkByDiscordUser(discordUserId: string): Promise<PlayerLink | null> {
-    const link = this.linksByDiscord.get(discordUserId);
+    const link = (this.linksByDiscord.get(discordUserId) ?? []).find((item) => item.isPrimary) ?? this.linksByDiscord.get(discordUserId)?.[0];
     return link ? { ...link } : null;
   }
 
+  async getLinksByDiscordUser(discordUserId: string): Promise<PlayerLink[]> { return (this.linksByDiscord.get(discordUserId) ?? []).map((link) => ({ ...link })); }
+  async setPrimaryMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean> { const links = this.linksByDiscord.get(discordUserId) ?? []; const selected = links.find((link) => link.minecraftUuid === minecraftUuid); if (!selected) return false; links.forEach((link) => { link.isPrimary = link === selected; }); return true; }
+  async unlinkMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean> { const links = this.linksByDiscord.get(discordUserId) ?? []; const index = links.findIndex((link) => link.minecraftUuid === minecraftUuid); if (index < 0) return false; const [removed] = links.splice(index, 1); if (!links.some((link) => link.isPrimary) && links[0]) links[0].isPrimary = true; if (links.length) this.linksByDiscord.set(discordUserId, links); else this.linksByDiscord.delete(discordUserId); this.linksByMinecraft.delete(removed.minecraftUuid); if (removed.bedrockXuid) this.linksByXuid.delete(removed.bedrockXuid); return true; }
+
   async unlinkDiscordUser(discordUserId: string): Promise<boolean> {
-    const link = this.linksByDiscord.get(discordUserId);
-    if (!link) return false;
-    this.linksByDiscord.delete(discordUserId);
-    this.linksByMinecraft.delete(link.minecraftUuid);
-    if (link.bedrockXuid) this.linksByXuid.delete(link.bedrockXuid);
-    return true;
+    const links = this.linksByDiscord.get(discordUserId) ?? [];
+    const removed = await Promise.all(links.map((link) => this.unlinkMinecraftAccount(discordUserId, link.minecraftUuid)));
+    return removed.some(Boolean);
   }
 
   async listEvents(limit: number): Promise<EventRecord[]> {

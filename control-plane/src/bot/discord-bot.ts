@@ -53,12 +53,10 @@ async function replyEvents(interaction: ChatInputCommandInteraction, store: Cont
 }
 
 async function replyLink(interaction: ChatInputCommandInteraction, store: ControlPlaneStore) {
-  const existing = await store.getLinkByDiscordUser(interaction.user.id);
-  if (existing) return interaction.reply({ ephemeral: true, content: `You are already linked to **${existing.javaUsername}**. Use /unlink first if you need to change identities.` });
   const code = generateLinkCode();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1_000);
   await store.createLinkCode(interaction.user.id, hashLinkCode(code), expiresAt);
-  return interaction.reply({ ephemeral: true, embeds: [new EmbedBuilder().setColor(0x57f287).setTitle("Link your Minecraft account").setDescription(`Run the following command in Minecraft within ten minutes:\n\n\`/kairu link ${code}\`\n\nThis code is **single-use** and expires ${relativeTime(expiresAt.toISOString())}. Do not share it.`)] });
+  return interaction.reply({ ephemeral: true, embeds: [new EmbedBuilder().setColor(0x57f287).setTitle("Link a Minecraft account").setDescription(`Run the following command in Minecraft within ten minutes:\n\n\`/kairu link ${code}\`\n\nThis adds a Minecraft account to your Discord identity. The code is **single-use** and expires ${relativeTime(expiresAt.toISOString())}. Do not share it.`)] });
 }
 
 async function replySync(interaction: ChatInputCommandInteraction, store: ControlPlaneStore, config: AppConfig) {

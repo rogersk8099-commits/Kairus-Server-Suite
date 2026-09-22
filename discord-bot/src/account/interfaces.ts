@@ -122,6 +122,7 @@ export interface MinecraftLink {
   minecraftUuid: string;
   minecraftUsername: string;
   linkedAt: string;
+  isPrimary?: boolean;
 }
 
 export interface LinkCode {
@@ -160,9 +161,12 @@ export interface OnlinePlayer {
 
 export interface LinkService {
   getLinkByDiscordUser(discordUserId: string): Promise<MinecraftLink | null>;
+  getLinksByDiscordUser(discordUserId: string): Promise<MinecraftLink[]>;
   /** Creates a server-verified, expiring pairing code; never accepts a Minecraft password. */
   createLinkCode(discordUserId: string): Promise<LinkCode>;
   unlinkDiscordUser(discordUserId: string): Promise<boolean>;
+  unlinkMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean>;
+  setPrimaryMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean>;
 }
 
 export interface PlayerDirectoryService {

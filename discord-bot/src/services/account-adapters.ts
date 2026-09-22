@@ -27,7 +27,7 @@ async function syncOne(database: PrismaClient, client: Client, guildId: string, 
   const member = await targetGuild.members.fetch(userId);
   const [membership, link, roles] = await Promise.all([
     database.discordMembership.findUnique({ where: { guildId_discordUserId: { guildId, discordUserId: userId } } }),
-    database.playerLink.findUnique({ where: { discordUserId: userId } }),
+    database.playerLink.findFirst({ where: { discordUserId: userId }, orderBy: [{ isPrimary: "desc" }, { linkedAt: "asc" }] }),
     setupRoles(database, guildId)
   ]);
   const verified = link !== null && membership?.status === "ACTIVE" && (!membership.expiresAt || membership.expiresAt > new Date());
@@ -53,9 +53,10 @@ export function createAccountServices(database: PrismaClient, api: ControlPlaneA
     logger,
     links: {
       async getLinkByDiscordUser(discordUserId): Promise<MinecraftLink | null> {
-        const row = await database.playerLink.findUnique({ where: { discordUserId } });
-        return row ? { discordUserId: row.discordUserId, minecraftUuid: row.minecraftUuid, minecraftUsername: row.javaUsername, linkedAt: row.linkedAt.toISOString() } : null;
+        const row = await database.playerLink.findFirst({ where: { discordUserId }, orderBy: [{ isPrimary: "desc" }, { linkedAt: "asc" }] });
+        return row ? { discordUserId: row.discordUserId, minecraftUuid: row.minecraftUuid, minecraftUsername: row.javaUsername, linkedAt: row.linkedAt.toISOString(), isPrimary: row.isPrimary } : null;
       },
+      async getLinksByDiscordUser(discordUserId) { const rows = await database.playerLink.findMany({ where: { discordUserId }, orderBy: [{ isPrimary: "desc" }, { linkedAt: "asc" }] }); return rows.map((row) => ({ discordUserId: row.discordUserId, minecraftUuid: row.minecraftUuid, minecraftUsername: row.javaUsername, linkedAt: row.linkedAt.toISOString(), isPrimary: row.isPrimary })); },
       async createLinkCode(discordUserId) {
         const code = randomBytes(16).toString("base64url").toUpperCase();
         const expiresAt = new Date(Date.now() + 10 * 60_000);
@@ -63,7 +64,9 @@ export function createAccountServices(database: PrismaClient, api: ControlPlaneA
         await database.$transaction([database.linkCode.deleteMany({ where: { discordUserId, consumedAt: null } }), database.linkCode.create({ data: { codeHash, discordUserId, expiresAt } })]);
         return { code, expiresAt };
       },
-      async unlinkDiscordUser(discordUserId) { return (await database.playerLink.deleteMany({ where: { discordUserId } })).count > 0; }
+      async unlinkDiscordUser(discordUserId) { return (await database.playerLink.deleteMany({ where: { discordUserId } })).count > 0; },
+      async unlinkMinecraftAccount(discordUserId, minecraftUuid) { const result = await database.$transaction(async (tx) => { const row = await tx.playerLink.findFirst({ where: { discordUserId, minecraftUuid } }); if (!row) return false; await tx.playerLink.delete({ where: { discordUserId_minecraftUuid: { discordUserId, minecraftUuid } } }); if (row.isPrimary) { const replacement = await tx.playerLink.findFirst({ where: { discordUserId }, orderBy: { linkedAt: "asc" } }); if (replacement) await tx.playerLink.update({ where: { discordUserId_minecraftUuid: { discordUserId, minecraftUuid: replacement.minecraftUuid } }, data: { isPrimary: true } }); } return true; }); return result; },
+      async setPrimaryMinecraftAccount(discordUserId, minecraftUuid) { return database.$transaction(async (tx) => { const selected = await tx.playerLink.findFirst({ where: { discordUserId, minecraftUuid } }); if (!selected) return false; await tx.playerLink.updateMany({ where: { discordUserId }, data: { isPrimary: false } }); await tx.playerLink.update({ where: { discordUserId_minecraftUuid: { discordUserId, minecraftUuid } }, data: { isPrimary: true } }); return true; }); }
     },
     players: {
       async getPlayerByMinecraftUuid(minecraftUuid) { return profile(await database.playerSnapshot.findUnique({ where: { minecraftUuid } })); },

@@ -32,7 +32,7 @@ function snapshotFrom(row: DbRow): PlayerSnapshot {
   return { minecraftUuid: String(row.minecraft_uuid), name: String(row.name), playtimeSeconds: Number(row.playtime_seconds), blocksBroken: Number(row.blocks_broken), kills: Number(row.kills), deaths: Number(row.deaths), distanceMeters: Number(row.distance_meters), balance: Number(row.balance), rankName: String(row.rank_name), worldName: row.world_name ? String(row.world_name) : null, updatedAt: timestamp(row.updated_at) };
 }
 function linkFrom(row: DbRow): PlayerLink {
-  return { discordUserId: String(row.discord_user_id), minecraftUuid: String(row.minecraft_uuid), javaUsername: String(row.java_username), bedrockXuid: row.bedrock_xuid ? String(row.bedrock_xuid) : null, linkedAt: timestamp(row.linked_at) };
+  return { discordUserId: String(row.discord_user_id), minecraftUuid: String(row.minecraft_uuid), javaUsername: String(row.java_username), bedrockXuid: row.bedrock_xuid ? String(row.bedrock_xuid) : null, isPrimary: Boolean(row.is_primary), linkedAt: timestamp(row.linked_at) };
 }
 function commandFrom(row: DbRow): PluginCommand {
   return { id: String(row.id), serverId: String(row.server_id), commandType: row.command_type as PluginCommand["commandType"], payload: row.payload as Record<string, unknown>, status: row.status as PluginCommand["status"], errorMessage: row.error_message ? String(row.error_message) : null, createdAt: timestamp(row.created_at), acknowledgedAt: row.acknowledged_at ? timestamp(row.acknowledged_at) : null };
@@ -105,12 +105,13 @@ export class PostgresStore implements ControlPlaneStore {
         await client.query("ROLLBACK");
         return { ok: false, reason: "invalid_or_expired" };
       }
-      const alreadyLinked = await client.query("SELECT 1 FROM player_links WHERE discord_user_id = $1 OR minecraft_uuid = $2 OR ($3::text IS NOT NULL AND bedrock_xuid = $3) LIMIT 1", [code.discord_user_id, identity.minecraftUuid, identity.bedrockXuid ?? null]);
+      const alreadyLinked = await client.query("SELECT 1 FROM player_links WHERE minecraft_uuid = $1 OR ($2::text IS NOT NULL AND bedrock_xuid = $2) LIMIT 1", [identity.minecraftUuid, identity.bedrockXuid ?? null]);
       if (alreadyLinked.rowCount) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "identity_already_linked" };
       }
-      const linkResult = await client.query("INSERT INTO player_links (discord_user_id, minecraft_uuid, java_username, bedrock_xuid) VALUES ($1,$2,$3,$4) RETURNING *", [code.discord_user_id, identity.minecraftUuid, identity.javaUsername, identity.bedrockXuid ?? null]);
+      const primary = await client.query("SELECT 1 FROM player_links WHERE discord_user_id = $1 LIMIT 1", [code.discord_user_id]);
+      const linkResult = await client.query("INSERT INTO player_links (discord_user_id, minecraft_uuid, java_username, bedrock_xuid, is_primary) VALUES ($1,$2,$3,$4,$5) RETURNING *", [code.discord_user_id, identity.minecraftUuid, identity.javaUsername, identity.bedrockXuid ?? null, primary.rowCount === 0]);
       await client.query("UPDATE link_codes SET consumed_at = NOW() WHERE code_hash = $1", [codeHash]);
       await client.query("COMMIT");
       return { ok: true, link: linkFrom(linkResult.rows[0]) };
@@ -122,8 +123,23 @@ export class PostgresStore implements ControlPlaneStore {
   }
 
   async getLinkByDiscordUser(discordUserId: string): Promise<PlayerLink | null> {
-    const { rows } = await this.pool.query("SELECT * FROM player_links WHERE discord_user_id = $1", [discordUserId]);
+    const { rows } = await this.pool.query("SELECT * FROM player_links WHERE discord_user_id = $1 ORDER BY is_primary DESC, linked_at ASC LIMIT 1", [discordUserId]);
     return rows[0] ? linkFrom(rows[0]) : null;
+  }
+
+  async getLinksByDiscordUser(discordUserId: string): Promise<PlayerLink[]> {
+    const { rows } = await this.pool.query("SELECT * FROM player_links WHERE discord_user_id = $1 ORDER BY is_primary DESC, linked_at ASC", [discordUserId]);
+    return rows.map(linkFrom);
+  }
+
+  async setPrimaryMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try { await client.query("BEGIN"); const owned = await client.query("SELECT 1 FROM player_links WHERE discord_user_id = $1 AND minecraft_uuid = $2 FOR UPDATE", [discordUserId, minecraftUuid]); if (!owned.rowCount) { await client.query("ROLLBACK"); return false; } await client.query("UPDATE player_links SET is_primary = FALSE WHERE discord_user_id = $1", [discordUserId]); await client.query("UPDATE player_links SET is_primary = TRUE WHERE discord_user_id = $1 AND minecraft_uuid = $2", [discordUserId, minecraftUuid]); await client.query("COMMIT"); return true; } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+  }
+
+  async unlinkMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try { await client.query("BEGIN"); const removed = await client.query("DELETE FROM player_links WHERE discord_user_id = $1 AND minecraft_uuid = $2 RETURNING is_primary", [discordUserId, minecraftUuid]); if (!removed.rowCount) { await client.query("ROLLBACK"); return false; } if (removed.rows[0].is_primary) await client.query("UPDATE player_links SET is_primary = TRUE WHERE discord_user_id = $1 AND minecraft_uuid = (SELECT minecraft_uuid FROM player_links WHERE discord_user_id = $1 ORDER BY linked_at ASC LIMIT 1)", [discordUserId]); await client.query("COMMIT"); return true; } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
   }
 
   async unlinkDiscordUser(discordUserId: string): Promise<boolean> {

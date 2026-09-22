@@ -29,6 +29,7 @@ export type PlayerLink = {
   minecraftUuid: string;
   javaUsername: string;
   bedrockXuid: string | null;
+  isPrimary: boolean;
   linkedAt: string;
 };
 
@@ -177,6 +178,9 @@ export interface ControlPlaneStore {
   createLinkCode(discordUserId: string, codeHash: string, expiresAt: Date): Promise<void>;
   completeLinkCode(codeHash: string, identity: LinkIdentity): Promise<LinkCodeResult>;
   getLinkByDiscordUser(discordUserId: string): Promise<PlayerLink | null>;
+  getLinksByDiscordUser(discordUserId: string): Promise<PlayerLink[]>;
+  setPrimaryMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean>;
+  unlinkMinecraftAccount(discordUserId: string, minecraftUuid: string): Promise<boolean>;
   unlinkDiscordUser(discordUserId: string): Promise<boolean>;
   listEvents(limit: number): Promise<EventRecord[]>;
   listStreams(): Promise<StreamRecord[]>;

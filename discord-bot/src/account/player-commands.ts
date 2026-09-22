@@ -74,14 +74,6 @@ export const linkMinecraftCommand: CommandModule = {
       return;
     }
     try {
-      const existing = await services.links.getLinkByDiscordUser(interaction.user.id);
-      if (existing) {
-        await respond(interaction, {
-          ephemeral: true,
-          content: `You are already linked to **${escapeDiscord(existing.minecraftUsername, 16)}**. Use /unlink-minecraft before linking another account.`
-        });
-        return;
-      }
       const code = await services.links.createLinkCode(interaction.user.id);
       const safeCode = cleanPlainText(code.code, 128);
       if (!safeCode || !/^[A-Z0-9_-]{8,128}$/.test(safeCode)) {
@@ -93,8 +85,8 @@ export const linkMinecraftCommand: CommandModule = {
         ephemeral: true,
         embeds: [{
           color: COLORS.SUCCESS,
-          title: "Link your Minecraft account",
-          description: `In Minecraft, run:\n\n\`/kairu link ${safeCode}\`\n\nThis one-time code expires ${expiryTime(code.expiresAt)}. Do not share it.`,
+          title: "Link a Minecraft account",
+          description: `In Minecraft, run:\n\n\`/kairu link ${safeCode}\`\n\nThis adds this Minecraft account to your Discord identity. You can link Java, Bedrock, and alt accounts. This one-time code expires ${expiryTime(code.expiresAt)}. Do not share it.`,
           footer: { text: "Kairu never asks for or stores Minecraft passwords." }
         }]
       });
@@ -107,7 +99,8 @@ export const linkMinecraftCommand: CommandModule = {
 export const unlinkMinecraftCommand: CommandModule = {
   definition: guildOnlyDefinition({
     name: "unlink-minecraft",
-    description: "Remove your linked Minecraft account after confirming"
+    description: "Remove one linked Minecraft account after confirming",
+    options: [{ type: 3, name: "minecraft_uuid", description: "Account UUID; defaults to primary", required: false, min_length: 36, max_length: 36 }]
   }),
   async execute(interaction, services) {
     await deferEphemeral(interaction);
@@ -116,19 +109,21 @@ export const unlinkMinecraftCommand: CommandModule = {
       return;
     }
     try {
-      const link = await services.links.getLinkByDiscordUser(interaction.user.id);
+      const requestedUuid = interaction.options.getString("minecraft_uuid", false);
+      const links = await services.links.getLinksByDiscordUser(interaction.user.id);
+      const link = requestedUuid ? links.find((item) => item.minecraftUuid === requestedUuid) ?? null : links.find((item) => item.isPrimary) ?? links[0] ?? null;
       if (!link) {
         await respond(interaction, { ephemeral: true, content: "You do not have a linked Minecraft account." });
         return;
       }
       await respond(interaction, {
         ephemeral: true,
-        content: `Remove the link to **${escapeDiscord(link.minecraftUsername, 16)}**? This cannot be undone.`,
+        content: `Remove the link to **${escapeDiscord(link.minecraftUsername, 16)}**? This cannot be undone. Your other linked accounts remain intact.`,
         components: [{
           type: 1,
           components: [
-            { type: 2, style: 4, label: "Confirm unlink", custom_id: `${UNLINK_COMPONENT_PREFIX}:confirm:${interaction.user.id}` },
-            { type: 2, style: 2, label: "Cancel", custom_id: `${UNLINK_COMPONENT_PREFIX}:cancel:${interaction.user.id}` }
+            { type: 2, style: 4, label: "Confirm unlink", custom_id: `${UNLINK_COMPONENT_PREFIX}:confirm:${interaction.user.id}:${link.minecraftUuid}` },
+            { type: 2, style: 2, label: "Cancel", custom_id: `${UNLINK_COMPONENT_PREFIX}:cancel:${interaction.user.id}:${link.minecraftUuid}` }
           ]
         }]
       });
@@ -137,9 +132,9 @@ export const unlinkMinecraftCommand: CommandModule = {
     }
   },
   async handleComponent(interaction: ComponentInteraction, services: CommandServices): Promise<boolean> {
-    const match = new RegExp(`^${UNLINK_COMPONENT_PREFIX.replace(/[:]/g, "\\:")}:(confirm|cancel):(\\d{5,25})$`).exec(interaction.customId);
+    const match = new RegExp(`^${UNLINK_COMPONENT_PREFIX.replace(/[:]/g, "\\:")}:(confirm|cancel):(\\d{5,25}):([0-9a-f-]{36})$`, "i").exec(interaction.customId);
     if (!match) return false;
-    const [, action, ownerId] = match;
+    const [, action, ownerId, minecraftUuid] = match;
     if (interaction.user.id !== ownerId) {
       await interaction.reply({ ephemeral: true, content: "Only the member who requested this confirmation can use it.", allowedMentions: { parse: [] } });
       return true;
@@ -150,7 +145,7 @@ export const unlinkMinecraftCommand: CommandModule = {
       return true;
     }
     try {
-      const removed = await services.links.unlinkDiscordUser(ownerId);
+      const removed = await services.links.unlinkMinecraftAccount(ownerId, minecraftUuid);
       await updateComponent(interaction, {
         content: removed ? "Your Minecraft account link has been removed." : "Your Minecraft account link was already removed.",
         components: []
@@ -316,9 +311,34 @@ export const playerCommand: CommandModule = {
   }
 };
 
+export const minecraftAccountsCommand: CommandModule = {
+  definition: guildOnlyDefinition({ name: "minecraft-accounts", description: "List your linked Minecraft accounts" }),
+  async execute(interaction, services) {
+    await deferEphemeral(interaction);
+    try {
+      const links = await services.links.getLinksByDiscordUser(interaction.user.id);
+      if (!links.length) return respond(interaction, { ephemeral: true, content: "You have no linked Minecraft accounts. Use /link-minecraft to add one." });
+      return respond(interaction, { ephemeral: true, content: `${links.map((link) => `${link.isPrimary ? "⭐ **Primary**" : "•"} **${escapeDiscord(link.minecraftUsername, 16)}**\\n\\`${link.minecraftUuid}\\``).join("\\n")}\\n\\nUse /primary-minecraft with an account UUID to change your primary account.` });
+    } catch (error) { await respondServiceFailure(interaction, services.logger, "minecraft-accounts", error); }
+  }
+};
+
+export const primaryMinecraftCommand: CommandModule = {
+  definition: guildOnlyDefinition({ name: "primary-minecraft", description: "Set your primary Minecraft account", options: [{ type: 3, name: "minecraft_uuid", description: "UUID shown by /minecraft-accounts", required: true, min_length: 36, max_length: 36 }] }),
+  async execute(interaction, services) {
+    await deferEphemeral(interaction);
+    const minecraftUuid = interaction.options.getString("minecraft_uuid", true);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(minecraftUuid)) return respond(interaction, { ephemeral: true, content: "Use the UUID shown by /minecraft-accounts." });
+    try { const changed = await services.links.setPrimaryMinecraftAccount(interaction.user.id, minecraftUuid); return respond(interaction, { ephemeral: true, content: changed ? "Your primary Minecraft account has been updated." : "That Minecraft account is not linked to your Discord account." }); }
+    catch (error) { await respondServiceFailure(interaction, services.logger, "primary-minecraft", error); }
+  }
+};
+
 export const playerCommands: readonly CommandModule[] = [
   linkMinecraftCommand,
   unlinkMinecraftCommand,
+  minecraftAccountsCommand,
+  primaryMinecraftCommand,
   profileCommand,
   serverStatusCommand,
   onlineCommand,

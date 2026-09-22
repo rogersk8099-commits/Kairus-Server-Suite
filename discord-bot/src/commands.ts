@@ -67,6 +67,7 @@ function communityDefinitions(): SlashCommandBuilder[] {
   add(slash("ban", "Ban a member", (b) => { staff(b, PermissionFlagsBits.BanMembers); user(b); str(b, "reason", "Reason"); }));
   add(slash("unban", "Unban a user", (b) => { staff(b, PermissionFlagsBits.BanMembers); str(b, "user_id", "Discord user ID"); str(b, "reason", "Reason"); }));
   add(slash("mod-history", "View moderation history", (b) => { staff(b, PermissionFlagsBits.ModerateMembers); user(b); }));
+  add(slash("nuke-channel", "Recreate a text channel after confirmation", (b) => { staff(b, PermissionFlagsBits.ManageChannels); b.addChannelOption((o) => o.setName("channel").setDescription("Text or announcement channel to recreate").setRequired(true).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)); }));
   return result;
 }
 
@@ -97,11 +98,38 @@ export async function dispatchCommand(interaction: ChatInputCommandInteraction, 
 export async function dispatchComponent(interaction: Component, deps: CommandDependencies): Promise<void> {
   try {
     for (const module of accountModules) if (module.handleComponent && await module.handleComponent(interaction as unknown as AccountComponent, deps.account)) return;
+    if (interaction.isButton() && interaction.customId.startsWith("kairu:nuke-channel:")) return handleNukeChannel(interaction, deps);
     if (interaction.isButton() && interaction.customId.startsWith("event:rsvp:")) return handleRsvp(interaction, deps.database);
     if (interaction.isStringSelectMenu() && interaction.customId === "ticket:category") return showTicketModal(interaction);
     if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket:modal:")) return openTicketFromModal(interaction, deps);
     await ephemeral(interaction, "This control has expired or is unavailable.");
   } catch (error) { deps.logger.error({ err: error, customId: interaction.customId, guildId: interaction.guildId }, "interaction component failed"); await safeFailure(interaction); }
+}
+
+async function requestNukeChannel(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!has(interaction, PermissionFlagsBits.ManageChannels)) return ephemeral(interaction, "Manage Channels is required.");
+  const channel = interaction.options.getChannel("channel", true);
+  if (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) return ephemeral(interaction, "Only text and announcement channels can be recreated.");
+  if (!channel.deletable) return ephemeral(interaction, "I cannot delete that channel. Check the bot's Manage Channels permission and role position.");
+  const customId = `kairu:nuke-channel:confirm:${interaction.user.id}:${channel.id}`;
+  await interaction.reply({ content: `This will clone and then permanently delete ${channel}. Messages cannot be restored. Continue?`, ephemeral: true, allowedMentions: noMentions, components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(customId).setLabel("Clone and delete channel").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`kairu:nuke-channel:cancel:${interaction.user.id}:${channel.id}`).setLabel("Cancel").setStyle(ButtonStyle.Secondary))] });
+}
+
+async function handleNukeChannel(interaction: ButtonInteraction, deps: CommandDependencies): Promise<void> {
+  const match = /^kairu:nuke-channel:(confirm|cancel):(\d{5,25}):(\d{5,25})$/.exec(interaction.customId);
+  if (!match) return ephemeral(interaction, "This channel reset confirmation is invalid or expired.");
+  const [, action, ownerId, channelId] = match;
+  if (interaction.user.id !== ownerId) return ephemeral(interaction, "Only the staff member who requested this confirmation can use it.");
+  if (!has(interaction, PermissionFlagsBits.ManageChannels)) return ephemeral(interaction, "Manage Channels is required.");
+  if (action === "cancel") { await interaction.update({ content: "Channel reset cancelled.", components: [] }); return; }
+  const channel = await deps.client.channels.fetch(channelId).catch(() => null);
+  if (!channel || channel.guildId !== interaction.guildId || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) return ephemeral(interaction, "That channel no longer exists or cannot be recreated.");
+  if (!channel.deletable) return ephemeral(interaction, "I cannot delete that channel. Check my permissions and role position.");
+  const replacement = await channel.clone({ reason: `Kairu channel reset confirmed by ${interaction.user.id}` });
+  await deps.database.discordSetupResource.updateMany({ where: { guildId: interaction.guildId!, discordId: channel.id }, data: { discordId: replacement.id } });
+  await channel.delete(`Kairu channel reset confirmed by ${interaction.user.id}`);
+  deps.logger.warn({ guildId: interaction.guildId, channelId, replacementChannelId: replacement.id, actorDiscordUserId: interaction.user.id }, "Discord channel recreated by confirmed nuke-channel command");
+  await interaction.update({ content: `Channel recreated as <#${replacement.id}>. Existing Kairu channel mappings were moved to the replacement; deleted messages cannot be restored.`, components: [] });
 }
 
 async function safeFailure(interaction: ChatInputCommandInteraction | Component): Promise<void> {
@@ -114,6 +142,7 @@ async function executeCommunity(i: ChatInputCommandInteraction, deps: CommandDep
   const db = deps.database, now = new Date(), name = i.commandName;
   if (name.startsWith("event-") && !has(i, PermissionFlagsBits.ManageGuild)) return ephemeral(i, "Manage Server is required.");
   switch (name) {
+    case "nuke-channel": return requestNukeChannel(i);
     case "event-create": { const event = await db.discordEvent.create({ data: { guildId: i.guildId, title: requiredString(i, "title"), description: requiredString(i, "description"), startsAt: date(requiredString(i, "starts_at")), createdBy: i.user.id, announcementChannelId: i.options.getString("channel_id") } }); return ephemeral(i, `Created event \`${event.id}\` as a draft.`); }
     case "event-edit": { const id = requiredString(i, "event_id"); const current = await db.discordEvent.findFirst({ where: { id, guildId: i.guildId } }); if (!current) return ephemeral(i, "Event not found."); const start = i.options.getString("starts_at"); const event = await db.discordEvent.update({ where: { id }, data: { title: i.options.getString("title") ?? undefined, description: i.options.getString("description") ?? undefined, startsAt: start ? date(start) : undefined, announcementChannelId: i.options.getString("channel_id") ?? undefined } }); return ephemeral(i, `Updated **${event.title}**.`); }
     case "event-cancel": { const event = await db.discordEvent.update({ where: { id: requiredString(i, "event_id") }, data: { status: "CANCELLED", cancellationReason: requiredString(i, "reason"), cancelledAt: now } }); return ephemeral(i, `Cancelled **${event.title}**.`); }
@@ -124,7 +153,7 @@ async function executeCommunity(i: ChatInputCommandInteraction, deps: CommandDep
     case "streamer-list": { if (!has(i, PermissionFlagsBits.ManageGuild)) return ephemeral(i, "Manage Server is required."); const rows = await db.discordStreamer.findMany({ where: { guildId: i.guildId, status: i.options.getString("status")?.toUpperCase() }, take: 50 }); return ephemeral(i, rows.map((row) => `\`${row.id}\` <@${row.discordUserId}> ${row.platform}: **${row.status}**`).join("\n") || "No applications found."); }
     case "streamer-approve": case "streamer-reject": case "streamer-suspend": { if (!has(i, PermissionFlagsBits.ManageGuild)) return ephemeral(i, "Manage Server is required."); const status = name.slice(9).toUpperCase(); const app = await db.discordStreamer.update({ where: { id: requiredString(i, "application_id") }, data: { status: status === "APPROVE" ? "APPROVED" : status === "REJECT" ? "REJECTED" : "SUSPENDED", reviewedBy: i.user.id, reviewReason: i.options.getString("reason") } }); return ephemeral(i, `Application \`${app.id}\` is **${app.status}**.`); }
     case "poll-create": { if (!has(i, PermissionFlagsBits.ManageGuild)) return ephemeral(i, "Manage Server is required."); const choices = requiredString(i, "options").split("|").map((item) => item.trim()).filter(Boolean); if (choices.length < 2 || choices.length > 25 || new Set(choices.map((x) => x.toLowerCase())).size !== choices.length) return ephemeral(i, "Provide 2-25 distinct options separated by |."); const close = i.options.getString("closes_at"); const poll = await db.discordPoll.create({ data: { guildId: i.guildId, question: requiredString(i, "question"), options: choices, createdBy: i.user.id, closesAt: close ? date(close) : null } }); return ephemeral(i, `Created poll \`${poll.id}\`.`); }
-    case "poll-vote": { const poll = await db.discordPoll.findFirst({ where: { id: requiredString(i, "poll_id"), guildId: i.guildId, status: "OPEN" } }); if (!poll || poll.closesAt && poll.closesAt <= now) return ephemeral(i, "Poll not found or closed."); const choice = i.options.getInteger("option", true), values = options(poll); if (choice < 0 || choice >= values.length) return ephemeral(i, "That option does not exist."); const link = await db.playerLink.findUnique({ where: { discordUserId: i.user.id } }); if (!link) return ephemeral(i, "Link your Minecraft account before voting."); try { await db.discordPollVote.create({ data: { pollId: poll.id, linkedAccountId: link.minecraftUuid, discordUserId: i.user.id, optionIndex: choice } }); } catch (error) { if ((error as { code?: string }).code === "P2002") return ephemeral(i, "Your linked account has already voted in this poll."); throw error; } return ephemeral(i, "Vote recorded."); }
+    case "poll-vote": { const poll = await db.discordPoll.findFirst({ where: { id: requiredString(i, "poll_id"), guildId: i.guildId, status: "OPEN" } }); if (!poll || poll.closesAt && poll.closesAt <= now) return ephemeral(i, "Poll not found or closed."); const choice = i.options.getInteger("option", true), values = options(poll); if (choice < 0 || choice >= values.length) return ephemeral(i, "That option does not exist."); const link = await db.playerLink.findFirst({ where: { discordUserId: i.user.id }, orderBy: [{ isPrimary: "desc" }, { linkedAt: "asc" }] }); if (!link) return ephemeral(i, "Link your Minecraft account before voting."); try { await db.discordPollVote.create({ data: { pollId: poll.id, linkedAccountId: link.minecraftUuid, discordUserId: i.user.id, optionIndex: choice } }); } catch (error) { if ((error as { code?: string }).code === "P2002") return ephemeral(i, "Your Discord account has already voted in this poll."); throw error; } return ephemeral(i, "Vote recorded."); }
     case "poll-close": { if (!has(i, PermissionFlagsBits.ManageGuild)) return ephemeral(i, "Manage Server is required."); await db.discordPoll.update({ where: { id: requiredString(i, "poll_id") }, data: { status: "CLOSED" } }); return ephemeral(i, "Poll closed."); }
     case "poll-results": { const poll = await db.discordPoll.findFirst({ where: { id: requiredString(i, "poll_id"), guildId: i.guildId }, include: { votes: true } }); if (!poll) return ephemeral(i, "Poll not found."); const values = options(poll), totals = values.map((_, index) => poll.votes.filter((vote) => vote.optionIndex === index).length); await i.reply({ content: `**${poll.question}**\n${values.map((value, index) => `${index}. ${value}: ${totals[index]}`).join("\n")}`, allowedMentions: noMentions }); return; }
     case "suggestion-create": { const row = await db.discordSuggestion.create({ data: { guildId: i.guildId, authorDiscordId: i.user.id, title: requiredString(i, "title"), body: requiredString(i, "body") } }); return ephemeral(i, `Suggestion \`${row.id}\` submitted.`); }

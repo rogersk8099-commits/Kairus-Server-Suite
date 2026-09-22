@@ -16,7 +16,7 @@ import { ServerSetupService } from "./setup/services/server-setup.service.js";
 const config = loadConfig();
 const logger = createLogger(config);
 const state: HealthState = { gateway: config.DISCORD_TOKEN ? "connecting" : "dormant", shuttingDown: false };
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 const idempotency = new PrismaIdempotencyStore(prisma);
 const api = new ControlPlaneApi(config, logger.child({ component: "control-plane" }));
 const account = createAccountServices(prisma, api, client, config, logger);
@@ -31,6 +31,20 @@ client.on(Events.ShardDisconnect, () => { state.gateway = "disconnected"; });
 client.on(Events.ShardResume, () => { state.gateway = "ready"; });
 client.on(Events.InteractionCreate, (interaction) => { if (interaction.isChatInputCommand()) void dispatchCommand(interaction, commands, logger); else if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) void dispatchComponent(interaction, dependencies); });
 client.on(Events.GuildMemberAdd, (member) => { void welcomeMember(prisma, member, logger).catch((error) => logger.error({ err: error, guildId: member.guild.id, userId: member.id }, "welcome flow failed")); });
+client.on(Events.MessageCreate, (message) => {
+  if (!message.guildId || message.author.bot || !message.content.trim()) return;
+  const mappings = config.DISCORD_CHANNEL_MAPPINGS;
+  let targetWorld: string | undefined;
+  if (mappings.GLOBAL_CHAT === message.channelId) targetWorld = undefined;
+  else {
+    const match = Object.entries(mappings).find(([purpose, channelId]) => purpose.startsWith("WORLD_CHAT:") && channelId === message.channelId);
+    if (!match) return;
+    targetWorld = match[0].slice("WORLD_CHAT:".length);
+  }
+  const content = message.content.replace(/@everyone|@here/g, "@​$&").trim().slice(0, 500);
+  void api.post("/api/admin/chat", { serverId: config.MINECRAFT_SERVER_ID, content, displayName: message.member?.displayName ?? message.author.username, targetWorld, discordMessageId: message.id, discordAuthorId: message.author.id })
+    .catch((error) => logger.error({ err: error, channelId: message.channelId, messageId: message.id }, "Discord-to-Minecraft chat queue failed"));
+});
 client.on(Events.Error, (error) => logger.error({ err: error }, "Discord client error"));
 
 let shutdownPromise: Promise<void> | undefined;

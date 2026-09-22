@@ -113,8 +113,11 @@ public final class KairuClientGateway {
             case "world-load" -> worldLoad(actor, require(args, 2, "Choose a world."));
             case "world-unload-arm" -> armWorldUnload(actor, require(args, 2, "Choose a world."));
             case "world-unload-confirm" -> confirmWorldUnload(actor, require(args, 2, "Choose a world."));
+            case "plot-info", "plot-home", "plot-claim", "plot-auto" -> plotCommand(actor, action.substring("plot-".length()), null);
+            case "plot-add", "plot-trust", "plot-remove", "plot-deny", "plot-undeny" -> plotCommand(actor, action.substring("plot-".length()), requireUuid(args, 2));
             case "plot-flag" -> plotBooleanFlag(actor, require(args, 2, "Choose a PlotSquared setting."), require(args, 3, "Choose a value."));
             case "plot-flag-value" -> plotTypedFlag(actor, decodeValue(require(args, 2, "Choose a PlotSquared setting.")), decodeValue(require(args, 3, "Enter a value.")));
+            case "role-add", "role-remove" -> updateLuckPermsRole(actor, action, requireUuid(args, 2), require(args, 3, "Choose a role."));
             case "build-review-queue" -> { plugin.openAtriumReviewQueue(actor); yield "Opening the Atrium review queue."; }
             case "build-showcase" -> { plugin.openAtriumShowcase(actor); yield "Opening featured Atrium builds."; }
             default -> "This SMPPlatform action is not available in the client yet.";
@@ -158,6 +161,35 @@ public final class KairuClientGateway {
         if (!value.matches("[A-Za-z0-9_.,:+-]{1,96}")) throw new IllegalArgumentException("That setting value contains unsupported characters.");
         if (!player.performCommand("plot flag set " + flagId + " " + value)) throw new IllegalArgumentException("PlotSquared did not accept that setting. Check your plot ownership and permissions.");
         return "PlotSquared received the " + flagId + " setting.";
+    }
+
+    /** PlotSquared remains the authority for ownership and its own detailed permission checks. */
+    private String plotCommand(Player actor, String command, UUID targetId) {
+        boolean inAtrium = plugin.worldRegistry().find("atrium").map(definition -> definition.minecraftWorldName().equalsIgnoreCase(actor.getWorld().getName())).orElse(false);
+        if (!inAtrium) throw new IllegalArgumentException("Plot controls are available only in The Atrium.");
+        if (Bukkit.getPluginManager().getPlugin("PlotSquared") == null) throw new IllegalArgumentException("PlotSquared is not available on this server.");
+        if (!List.of("info", "home", "claim", "auto", "add", "trust", "remove", "deny", "undeny").contains(command)) throw new IllegalArgumentException("That plot action is not supported.");
+        String suffix = "";
+        if (targetId != null) {
+            Player target = Bukkit.getPlayer(targetId);
+            if (target == null) throw new IllegalArgumentException("That player is no longer online.");
+            suffix = " " + target.getName();
+        }
+        if (!actor.performCommand("plot " + command + suffix)) throw new IllegalArgumentException("PlotSquared did not accept that action. Check your plot ownership and permissions.");
+        return "PlotSquared received the " + command + " request.";
+    }
+
+    /** Console dispatch is deliberately limited to the platform's assignable LuckPerms groups. */
+    private String updateLuckPermsRole(Player actor, String action, UUID targetId, String requestedRole) {
+        requirePermission(actor, "smpplatform.admin.roles");
+        if (Bukkit.getPluginManager().getPlugin("LuckPerms") == null) throw new IllegalArgumentException("LuckPerms is not available on this server.");
+        String role = requestedRole.toLowerCase(Locale.ROOT);
+        if (!List.of("member", "builder", "helper", "moderator", "administrator").contains(role)) throw new IllegalArgumentException("That LuckPerms role is not assignable from this menu.");
+        Player target = Bukkit.getPlayer(targetId);
+        if (target == null) throw new IllegalArgumentException("That player is no longer online.");
+        String verb = action.equals("role-add") ? "add" : "remove";
+        if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "lp user " + target.getName() + " parent " + verb + " " + role)) throw new IllegalArgumentException("LuckPerms did not accept that role update.");
+        return (verb.equals("add") ? "Granted " : "Removed ") + role + " for " + target.getName() + ".";
     }
 
     private static String decodeValue(String encoded) {
@@ -301,6 +333,7 @@ public final class KairuClientGateway {
         JsonArray permissions = new JsonArray();
         for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events", "creative")) if (permits(player, action)) permissions.add(action);
         state.add("permissions", permissions); state.add("players", players()); state.add("worlds", worlds()); state.add("travelWorlds", travelWorlds(player)); state.add("flags", readableFlags());
+        if (permits(player, "roles")) state.add("roles", manageableRoles());
         if (view != null && viewData != null) state.add(switch (view) { case "guild-summary" -> "guild"; case "points-summary" -> "points"; default -> view; }, viewData);
         player.sendMessage(PREFIX + state);
     }
@@ -327,7 +360,8 @@ public final class KairuClientGateway {
         return rows;
     }
     private static void flag(JsonArray rows, String id, String name, String description, String type, boolean editable) { JsonObject row = new JsonObject(); row.addProperty("id", id); row.addProperty("name", name); row.addProperty("description", description); row.addProperty("type", type); row.addProperty("boolean", editable); rows.add(row); }
-    private boolean permits(Player player, String action) { return isAdmin(player) && player.hasPermission("smpplatform.admin." + action); }
+    private static JsonArray manageableRoles() { JsonArray rows = new JsonArray(); for (String name : List.of("member", "builder", "helper", "moderator", "administrator")) { JsonObject role = new JsonObject(); role.addProperty("name", name); rows.add(role); } return rows; }
+    private boolean permits(Player player, String action) { return player.isOp() || (isAdmin(player) && player.hasPermission("smpplatform.admin." + action)); }
     private static boolean isAdmin(Player player) { return player.isOp() || player.hasPermission("smpplatform.admin"); }
     private static void requirePermission(Player player, String permission) { if (!player.isOp() && !player.hasPermission(permission)) throw new IllegalArgumentException("You do not have permission for that action."); }
     private static String require(String[] args, int index, String message) { if (args.length <= index || args[index].isBlank()) throw new IllegalArgumentException(message); return args[index]; }

@@ -28,6 +28,7 @@ const schemaShape = {
   REMINDER_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
   STATUS_INTERVAL_MS: z.coerce.number().int().min(30_000).default(60_000),
   DISCORD_CHANNEL_MAPPINGS: channelMappings,
+  MINECRAFT_SERVER_ID: z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/).default("primary"),
   TWITCH_CLIENT_ID: optionalString,
   TWITCH_CLIENT_SECRET: optionalSecret,
   YOUTUBE_API_KEY: optionalSecret

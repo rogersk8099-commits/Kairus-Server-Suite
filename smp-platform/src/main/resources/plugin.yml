@@ -30,6 +30,9 @@ commands:
   kairu:
     description: Link your Minecraft account to Discord using a one-time code.
     usage: /kairu link <code>
+  chat:
+    description: Shows Kairu chat mode help.
+    aliases: [world, global, wc]
   events:
     description: Colosseum event RSVP and check-in.
     permission: smpplatform.events.use
@@ -68,6 +71,7 @@ permissions:
   smpplatform.admin.lifecycle: {default: op}
   smpplatform.admin.hardcore: {default: op}
   smpplatform.admin.quarry: {default: op}
+  smpplatform.admin.roles: {default: op}
   smpplatform.creative.worldedit: {default: false}
   smpplatform.world.ashfall: {default: true}
   smpplatform.world.obsidian-gate: {default: true}

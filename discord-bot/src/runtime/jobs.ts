@@ -122,7 +122,7 @@ export class RuntimeJobs {
   private async bridgeEvents(guildId: string): Promise<void> {
     const [status, result] = await Promise.all([
       this.api.get<{ online: boolean; heartbeat: null | { online: boolean; receivedAt: string } }>("/api/server/status"),
-      this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string; worldName: string | null; minecraftUuid: string | null; minecraftName: string | null }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`)
+      this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string; worldName: string | null; minecraftUuid: string | null; minecraftName: string | null; details: Record<string, string> }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`)
     ]);
     if (!result.events.length) return;
     const heartbeatAge = status.heartbeat ? Date.now() - new Date(status.heartbeat.receivedAt).getTime() : Number.POSITIVE_INFINITY;
@@ -148,8 +148,15 @@ export class RuntimeJobs {
           continue;
         }
       }
-      const channel = await this.mappedChannel(guildId, event.eventType, "text-channel.game-chat");
+      const chatPurpose = event.eventType === "CHAT" ? (event.details?.chatType === "GLOBAL" ? "GLOBAL_CHAT" : `WORLD_CHAT:${event.details?.worldId ?? event.worldName ?? ""}`) : event.eventType;
+      const channel = await this.mappedChannel(guildId, chatPurpose, "text-channel.game-chat");
       if (channel) {
+        if (event.eventType === "CHAT") {
+          const author = event.minecraftName ?? "Minecraft";
+          await channel.send({ embeds: [new EmbedBuilder().setColor(0x53dbfa).setAuthor({ name: `Minecraft • ${event.details?.chatType ?? "WORLD"}` }).setDescription(`**${author}**: ${event.content.slice(0, 3_800)}`).setTimestamp(new Date(event.receivedAt))], allowedMentions: { parse: [] } });
+          if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
+          continue;
+        }
         const lifecycle = event.eventType === "PLAYER_JOIN" || event.eventType === "PLAYER_LEAVE";
         const embed = new EmbedBuilder().setColor(0x8b5cf6).setTitle(`Kairu SMP • ${event.eventType.replaceAll("_", " ")}`).setDescription(event.content.slice(0, 4_096)).setTimestamp(new Date(event.receivedAt));
         if (!lifecycle && event.worldName) embed.addFields({ name: "World", value: event.worldName.slice(0, 1_024), inline: true });

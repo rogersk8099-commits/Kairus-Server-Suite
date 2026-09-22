@@ -12,6 +12,7 @@ import com.neonnexus.smpplatform.database.DatabaseService;
 import com.neonnexus.smpplatform.identity.FloodgateIdentityAdapter;
 import com.neonnexus.smpplatform.listeners.PlayerIdentityListener;
 import com.neonnexus.smpplatform.listeners.ControlPlaneBridgeListener;
+import com.neonnexus.smpplatform.listeners.DiscordChatBridgeListener;
 import com.neonnexus.smpplatform.multiverse.MultiverseInventoryAdapter;
 import com.neonnexus.smpplatform.multiverse.MultiverseWorldAdapter;
 import com.neonnexus.smpplatform.outbox.HttpOutboxDeliveryClient;
@@ -50,6 +51,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.UUID;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -90,11 +92,13 @@ public final class SMPPlatform extends JavaPlugin {
             FloodgateIdentityAdapter identities = FloodgateIdentityAdapter.discover(getServer().getPluginManager(), getLogger());
             getServer().getPluginManager().registerEvents(new PlayerIdentityListener(identities, getLogger()), this);
             getServer().getPluginManager().registerEvents(new ControlPlaneBridgeListener(this), this);
+            getServer().getPluginManager().registerEvents(new DiscordChatBridgeListener(this), this);
             database = new DatabaseService(configuration.core().database(), getLogger());
             executors.io().execute(this::startDatabaseServicesAsync);
             if (configuration.core().centralApi().enabled()) {
                 startCentralSync();
                 startHeartbeat();
+                startIncomingDiscordChat();
                 publishBridgeEvent("SERVER_STARTED", null, null, "Kairu SMP started", java.util.Map.of("version", getDescription().getVersion()));
             }
             getLogger().info("SMPPlatform core enabled with World Registry revision " + registry.snapshot().revision() + "; offline=" + registry.snapshot().offlineMode());
@@ -215,6 +219,53 @@ public final class SMPPlatform extends JavaPlugin {
         postControlPlane("/api/plugin/bridge-events", payload);
     }
 
+    /** Minecraft to Discord goes only through the Control Plane event bus. */
+    public void publishMinecraftChat(Player player, String content, String chatType) {
+        if (content.length() > 500) content = content.substring(0, 500);
+        WorldDefinition world = registry.snapshot().worlds().values().stream().filter(definition -> definition.minecraftWorldName().equalsIgnoreCase(player.getWorld().getName())).findFirst().orElse(null);
+        if (world == null || world.id().equals("spawn-hub") || world.id().equals("verdance")) return;
+        publishBridgeEvent("CHAT", world.id(), player, content, java.util.Map.of("chatType", chatType, "worldId", world.id()));
+    }
+
+    private void startIncomingDiscordChat() {
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::pollIncomingDiscordChat, 100L, 100L);
+    }
+
+    private void pollIncomingDiscordChat() {
+        if (configuration == null || !configuration.core().centralApi().enabled()) return;
+        try {
+            String base = configuration.core().centralApi().baseUrl().replaceAll("/$", "");
+            HttpRequest request = HttpRequest.newBuilder(URI.create(base + "/api/plugin/chat/queued?limit=20"))
+                    .header("Authorization", "Bearer " + resolveCentralApiToken()).header("X-Kairu-Server-Id", configuration.core().serverId()).GET().build();
+            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() / 100 != 2) { getLogger().warning("Control Plane queued chat returned HTTP " + response.statusCode()); return; }
+            JsonArray messages = JsonParser.parseString(response.body()).getAsJsonObject().getAsJsonArray("messages");
+            for (var item : messages) {
+                JsonObject message = item.getAsJsonObject(); String id = message.get("id").getAsString();
+                String content = message.get("content").getAsString(); String displayName = message.has("displayName") ? message.get("displayName").getAsString() : "Discord";
+                String targetWorld = message.has("targetWorld") ? message.get("targetWorld").getAsString() : null;
+                Bukkit.getScheduler().callSyncMethod(this, () -> { deliverDiscordChat(displayName, content, targetWorld); return null; }).get(5, TimeUnit.SECONDS);
+                acknowledgeIncomingChat(base, id, "delivered", "Broadcast to Minecraft");
+            }
+        } catch (Exception exception) { getLogger().warning("Control Plane queued chat delivery failed: " + exception.getClass().getSimpleName()); }
+    }
+
+    private void deliverDiscordChat(String displayName, String content, String targetWorld) {
+        String safeName = displayName.replaceAll("[§\\r\\n]", "").trim(); String safeContent = content.replaceAll("[§\\r\\n]", " ").trim();
+        if (safeName.isBlank()) safeName = "Discord"; if (safeContent.isBlank()) return;
+        String rendered = "§9[DISCORD] §b" + safeName.substring(0, Math.min(48, safeName.length())) + "§7: " + safeContent.substring(0, Math.min(500, safeContent.length()));
+        if (targetWorld == null || targetWorld.isBlank()) Bukkit.broadcastMessage(rendered);
+        else for (Player player : Bukkit.getOnlinePlayers()) if (player.getWorld().getName().equalsIgnoreCase(targetWorld) || registry.find(targetWorld).map(definition -> definition.minecraftWorldName().equalsIgnoreCase(player.getWorld().getName())).orElse(false)) player.sendMessage(rendered);
+    }
+
+    private void acknowledgeIncomingChat(String base, String id, String status, String detail) {
+        try {
+            JsonObject payload = new JsonObject(); payload.addProperty("status", status); payload.addProperty("detail", detail);
+            HttpRequest request = HttpRequest.newBuilder(URI.create(base + "/api/plugin/chat/" + id + "/ack")).header("Content-Type", "application/json").header("Authorization", "Bearer " + resolveCentralApiToken()).header("X-Kairu-Server-Id", configuration.core().serverId()).POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8)).build();
+            HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception exception) { getLogger().warning("Control Plane chat acknowledgement failed: " + exception.getClass().getSimpleName()); }
+    }
+
     private void postControlPlane(String path, JsonObject payload) {
         executors.io().execute(() -> {
             try {
@@ -235,6 +286,7 @@ public final class SMPPlatform extends JavaPlugin {
             return clientGateway != null && clientGateway.handle(sender, args);
         }
         if (name.equals("kairu")) return linkDiscordAccount(sender, args);
+        if (name.equals("chat") || name.equals("world") || name.equals("global")) { sender.sendMessage("§7Chat bridge is active. Ordinary chat is shared with Discord where its channel mapping is configured."); return true; }
         if (name.equals("worlds")) {
             if (registry == null) { sender.sendMessage("SMPPlatform World Registry is not available."); return true; }
             var snapshot = registry.snapshot();

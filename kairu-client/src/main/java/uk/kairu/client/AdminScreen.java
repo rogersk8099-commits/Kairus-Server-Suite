@@ -16,6 +16,7 @@ public final class AdminScreen extends Screen {
     private String route="overview",target="",targetName="",query="",selectedFlag="",selectedFlagType="";
     private boolean selectedFlagBoolean;
     private int page,seenRevision,slot;
+    private int administrationHeaderY=-1;
     private boolean rebuilding;
     private EditBox search;
     private Layout layout;
@@ -39,11 +40,17 @@ public final class AdminScreen extends Screen {
             if(!KairuClient.admin()&&!Set.of("plots","members","member","flags","flag","travel","guilds","guild-create","guild-invites","guild-top","points","points-currency","points-history","points-top","guild-invite","guild-members","guild-member","guild-leave","guild-transfer-arm","guild-transfer-confirm","world-unload-arm","world-unload-confirm").contains(route))route="travel";
             int x=layout.x(),y=layout.y(),w=layout.width();
             button(x+w-56,y+12,44,"Close",this::onClose);
-            var tabs=new ArrayList<String>();
-            if(KairuClient.admin()){tabs.add("overview");tabs.add("players");tabs.add("worlds");}tabs.add("travel");tabs.add("guilds");tabs.add("points");tabs.add("plots");
-            int tabW=layout.sidebar()?126:Math.max(28,(w-24)/tabs.size());
-            for(int i=0;i<tabs.size();i++) {String tab=tabs.get(i);
-                navButton(layout.sidebar()?x+12:x+12+i*tabW,layout.sidebar()?y+58+i*30:y+47,tabW-4,capitalize(tab),tab.equals(route),()->go(tab));}
+            var playerTabs=new ArrayList<>(List.of("travel","guilds","points","plots"));
+            var adminTabs=new ArrayList<String>(); if(KairuClient.admin())adminTabs.addAll(List.of("overview","players","worlds"));
+            administrationHeaderY=-1;
+            if(layout.sidebar()) {
+                int navY=y+58;
+                for(String tab:playerTabs){String selected=tab;navButton(x+12,navY,122,capitalize(tab),tab.equals(route),()->go(selected));navY+=30;}
+                if(!adminTabs.isEmpty()){administrationHeaderY=navY+5;navY+=20;for(String tab:adminTabs){String selected=tab;navButton(x+12,navY,122,capitalize(tab),tab.equals(route),()->go(selected));navY+=30;}}
+            } else {
+                var tabs=new ArrayList<String>();tabs.addAll(playerTabs);tabs.addAll(adminTabs);int tabW=Math.max(28,(w-24)/tabs.size());
+                for(int i=0;i<tabs.size();i++){String tab=tabs.get(i);navButton(x+12+i*tabW,y+47,tabW-4,capitalize(tab),tab.equals(route),()->go(tab));}
+            }
             buildEntries();
             boolean guildCreate=route.equals("guild-create"),buildSubmit=route.equals("build-submit"),typedPlotFlag=route.equals("flag")&&!selectedFlagBoolean;
             search=new EditBox(font,layout.contentX(),layout.contentY(),Math.max(20,layout.contentWidth()),20,Component.literal(guildCreate?"Guild name | TAG | optional description":buildSubmit?"Build title | optional description":typedPlotFlag?"Enter a PlotSquared value":"Search this page"));
@@ -152,9 +159,7 @@ public final class AdminScreen extends Screen {
             case "roles" -> {
                 heading=targetName+" / LuckPerms roles";
                 if(!KairuClient.can("roles")||!s.has("roles"))return;
-                Set<String> assigned=new HashSet<>();
-                if(s.has("assignments")) for(JsonElement value:s.getAsJsonArray("assignments")) { JsonObject row=value.getAsJsonObject(); if(row.get("id").getAsString().equals(target)) row.getAsJsonArray("roles").forEach(v->assigned.add(v.getAsString())); }
-                s.getAsJsonArray("roles").forEach(value->{ JsonObject role=value.getAsJsonObject(); String name=role.get("name").getAsString(); boolean has=assigned.contains(name); add((has?"Remove ":"Grant ")+name,()->run(has?"role-remove":"role-add",target,name)); });
+                s.getAsJsonArray("roles").forEach(value->{ JsonObject role=value.getAsJsonObject(); String name=role.get("name").getAsString(); add("Grant "+name,()->run("role-add",target,name));add("Remove "+name,()->run("role-remove",target,name)); });
                 add("Back to player",()->go("player"));
             }
             case "kick" -> {heading="Kick "+targetName+"?";if(KairuClient.can("kick"))add("Confirm kick",()->{run("kick",target);go("players");});add("Cancel",()->go("player"));}
@@ -217,6 +222,7 @@ public final class AdminScreen extends Screen {
         g.fill(layout.x()+12,layout.y()+42,layout.x()+layout.width()-12,layout.y()+43,LINE);
         g.text(font,"KAIRU SMP",layout.x()+14,layout.y()+13,CYAN,false);
         if(layout.sidebar())g.text(font,"SERVER CONTROL PANEL",layout.x()+14,layout.y()+27,MUTED,false);
+        if(layout.sidebar()&&administrationHeaderY>=0)g.text(font,"ADMINISTRATION",layout.x()+14,administrationHeaderY,MUTED,false);
         int titleX=layout.sidebar()?layout.contentX():layout.x()+14;
         int titleY=layout.sidebar()?layout.y()+16:layout.y()+27;
         g.text(font,clip(heading,Math.max(20,layout.width()-88)),titleX,titleY,WHITE,false);

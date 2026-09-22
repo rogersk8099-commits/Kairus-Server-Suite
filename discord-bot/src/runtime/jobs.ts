@@ -81,7 +81,7 @@ export class RuntimeJobs {
     for (const stream of live) {
       const key = `live:${guildId}:${stream.platform}:${stream.streamId}`;
       if (!await this.dedupe.claim(key, 7 * 24 * 60 * 60_000, { streamId: stream.streamId })) continue;
-      await channel.send({ content: `**${stream.channelName} is live**\n${stream.title}\n${stream.url}`, allowedMentions: { parse: [] } });
+      await channel.send({ embeds: [new EmbedBuilder().setColor(0x9146ff).setTitle("Kairu SMP • Stream live").setDescription(stream.title.slice(0, 4_096)).addFields({ name: "Creator", value: stream.channelName.slice(0, 1_024), inline: true }, { name: "Watch", value: stream.url.slice(0, 1_024), inline: false }).setTimestamp()], allowedMentions: { parse: [] } });
       await this.database.discordNotification.create({ data: { guildId, target: "DISCORD", subject: `${stream.channelName} is live`, body: `${stream.title}\n${stream.url}`, dedupeKey: key, status: "SENT", sentAt: new Date(), metadata: { provider: stream.platform, streamId: stream.streamId } } });
     }
   }
@@ -93,22 +93,25 @@ export class RuntimeJobs {
       const channelId = row.event.announcementChannelId;
       const channel = channelId ? await this.client.channels.fetch(channelId).catch(() => null) : null;
       if (channel?.type === ChannelType.GuildText && row.event.status === "SCHEDULED") {
-        await channel.send({ content: `**${row.kind === "NOW" ? "Starting now" : `Event reminder (${row.kind})`}: ${row.event.title}**\n${row.event.description}`, allowedMentions: { parse: [] } });
+        await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865f2).setTitle(`Kairu SMP • ${row.kind === "NOW" ? "Event starting now" : `Event reminder (${row.kind})`}`).setDescription(row.event.description.slice(0, 4_096)).addFields({ name: "Event", value: row.event.title.slice(0, 1_024), inline: false }).setTimestamp()], allowedMentions: { parse: [] } });
       }
       await this.database.discordEventReminder.update({ where: { id: row.id }, data: { deliveredAt: new Date() } });
     }
   }
 
   private async status(guildId: string): Promise<void> {
-    const [{ heartbeat }, channel] = await Promise.all([this.api.get<{ online: boolean; heartbeat: null | { online: boolean; tps: number; playerCount: number; worlds: string[]; version: string; uptimeSeconds: number; receivedAt: string } }>("/api/server/status"), this.mappedChannel(guildId, "SERVER_STATUS", "text-channel.server-status")]);
+    const [{ heartbeat }, channel] = await Promise.all([this.api.get<{ online: boolean; heartbeat: null | { online: boolean; tps: number; playerCount: number; worlds: string[]; worldPlayers: Array<{ id: string; name: string; playerCount: number; status: string }>; version: string; uptimeSeconds: number; receivedAt: string } }>("/api/server/status"), this.mappedChannel(guildId, "SERVER_STATUS", "text-channel.server-status")]);
     if (!heartbeat || !channel) return;
-    const signature = JSON.stringify([heartbeat.online, heartbeat.playerCount, heartbeat.tps.toFixed(2), heartbeat.worlds, heartbeat.version]);
+    const signature = JSON.stringify([heartbeat.online, heartbeat.playerCount, heartbeat.tps.toFixed(2), heartbeat.worldPlayers, heartbeat.version]);
     if (this.statusSignatures.get(guildId) === signature) return;
     const updatedAt = Math.floor(new Date(heartbeat.receivedAt).getTime() / 1_000);
     const state = heartbeat.online ? "🟢 KAIRU SMP ONLINE" : "🔴 KAIRU SMP OFFLINE";
+    const worlds = heartbeat.worldPlayers.length
+      ? heartbeat.worldPlayers.map((world) => `• **${world.name}** — ${world.playerCount} active · ${world.status.replaceAll("_", " ")}`).join("\n").slice(0, 1_024)
+      : heartbeat.worlds.length ? heartbeat.worlds.map((world) => `• ${world} — 0 active`).join("\n").slice(0, 1_024) : "No registered worlds reported";
     const embed = new EmbedBuilder().setColor(heartbeat.online ? 0x57f287 : 0xed4245).setTitle(state)
-      .addFields({ name: "Players", value: String(heartbeat.playerCount), inline: true }, { name: "TPS", value: heartbeat.tps.toFixed(2), inline: true }, { name: "Minecraft", value: heartbeat.version, inline: true }, { name: "Worlds", value: heartbeat.worlds.length ? heartbeat.worlds.map((world) => `• ${world}`).join("\n").slice(0, 1_024) : "None reported" })
-      .setFooter({ text: `Updated <t:${updatedAt}:R>` });
+      .addFields({ name: "Players", value: String(heartbeat.playerCount), inline: true }, { name: "TPS", value: heartbeat.tps.toFixed(2), inline: true }, { name: "Minecraft", value: heartbeat.version, inline: true }, { name: "World status", value: worlds })
+      .setFooter({ text: `Last update <t:${updatedAt}:R>` });
     const existing = await this.database.discordSetupResource.findUnique({ where: { guildId_resourceKey: { guildId, resourceKey: "message.server-status" } } });
     const prior = existing ? await channel.messages.fetch(existing.discordId).catch(() => null) : null;
     const message = prior ? await prior.edit({ embeds: [embed] }) : await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
@@ -117,11 +120,22 @@ export class RuntimeJobs {
   }
 
   private async bridgeEvents(guildId: string): Promise<void> {
-    const result = await this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`);
+    const result = await this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string; worldName: string | null; minecraftName: string | null }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`);
     if (!result.events.length) return;
     for (const event of result.events) {
+      // Service lifecycle is represented by the single persistent SERVER_STATUS embed.
+      // Never turn each plugin restart/shutdown into a Discord channel message.
+      if (["SERVER_STARTED", "SERVER_STOPPING", "MAINTENANCE"].includes(event.eventType)) {
+        if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
+        continue;
+      }
       const channel = await this.mappedChannel(guildId, event.eventType, "text-channel.game-chat");
-      if (channel) await channel.send({ content: `**${event.eventType.replaceAll("_", " ")}** · ${event.content}`.slice(0, 1_900), allowedMentions: { parse: [] } });
+      if (channel) {
+        const embed = new EmbedBuilder().setColor(0x8b5cf6).setTitle(`Kairu SMP • ${event.eventType.replaceAll("_", " ")}`).setDescription(event.content.slice(0, 4_096)).setTimestamp(new Date(event.receivedAt));
+        if (event.worldName) embed.addFields({ name: "World", value: event.worldName.slice(0, 1_024), inline: true });
+        if (event.minecraftName) embed.addFields({ name: "Player", value: event.minecraftName.slice(0, 1_024), inline: true });
+        await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+      }
       if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
     }
   }

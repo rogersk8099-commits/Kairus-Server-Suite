@@ -20,6 +20,12 @@ const heartbeatSchema = z.object({
   tps: z.number().finite().min(0).max(100),
   playerCount: nonNegativeInt.max(100_000),
   worlds: z.array(z.string().trim().min(1).max(128)).max(256),
+  worldPlayers: z.array(z.object({
+    id: z.string().trim().min(1).max(128),
+    name: z.string().trim().min(1).max(128),
+    playerCount: nonNegativeInt.max(100_000),
+    status: z.string().trim().min(1).max(64)
+  }).strict()).max(256).default([]),
   players: z.array(z.string().trim().min(1).max(32)).max(100_000).default([]),
   version: z.string().trim().min(1).max(128),
   uptimeSeconds: nonNegativeInt

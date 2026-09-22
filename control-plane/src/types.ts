@@ -4,6 +4,8 @@ export type ServerHeartbeat = {
   tps: number;
   playerCount: number;
   worlds: string[];
+  /** Registered worlds and their current online population. */
+  worldPlayers: Array<{ id: string; name: string; playerCount: number; status: string }>;
   players: string[];
   version: string;
   uptimeSeconds: number;

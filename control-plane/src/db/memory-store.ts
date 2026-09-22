@@ -46,12 +46,12 @@ export class MemoryStore implements ControlPlaneStore {
   async close(): Promise<void> {}
 
   async getLatestHeartbeat(): Promise<ServerHeartbeat | null> {
-    return this.heartbeat ? { ...this.heartbeat, worlds: [...this.heartbeat.worlds], players: [...this.heartbeat.players] } : null;
+    return this.heartbeat ? { ...this.heartbeat, worlds: [...this.heartbeat.worlds], worldPlayers: this.heartbeat.worldPlayers.map((world) => ({ ...world })), players: [...this.heartbeat.players] } : null;
   }
 
   async recordHeartbeat(heartbeat: Omit<ServerHeartbeat, "receivedAt">): Promise<ServerHeartbeat> {
-    this.heartbeat = { ...heartbeat, worlds: [...heartbeat.worlds], players: [...heartbeat.players], receivedAt: new Date().toISOString() };
-    return { ...this.heartbeat, worlds: [...this.heartbeat.worlds], players: [...this.heartbeat.players] };
+    this.heartbeat = { ...heartbeat, worlds: [...heartbeat.worlds], worldPlayers: heartbeat.worldPlayers.map((world) => ({ ...world })), players: [...heartbeat.players], receivedAt: new Date().toISOString() };
+    return { ...this.heartbeat, worlds: [...this.heartbeat.worlds], worldPlayers: this.heartbeat.worldPlayers.map((world) => ({ ...world })), players: [...this.heartbeat.players] };
   }
 
   async recordPlayerSnapshot(snapshot: Omit<PlayerSnapshot, "updatedAt">): Promise<PlayerSnapshot> {

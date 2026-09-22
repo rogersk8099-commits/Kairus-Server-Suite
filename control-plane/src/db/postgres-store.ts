@@ -26,7 +26,7 @@ function timestamp(value: unknown): string {
   return new Date(value as string | Date).toISOString();
 }
 function heartbeatFrom(row: DbRow): ServerHeartbeat {
-  return { serverId: String(row.server_id), online: Boolean(row.online), tps: Number(row.tps), playerCount: Number(row.player_count), worlds: row.worlds as string[], players: row.players as string[], version: String(row.version), uptimeSeconds: Number(row.uptime_seconds), receivedAt: timestamp(row.received_at) };
+  return { serverId: String(row.server_id), online: Boolean(row.online), tps: Number(row.tps), playerCount: Number(row.player_count), worlds: row.worlds as string[], worldPlayers: (row.world_players ?? []) as ServerHeartbeat["worldPlayers"], players: row.players as string[], version: String(row.version), uptimeSeconds: Number(row.uptime_seconds), receivedAt: timestamp(row.received_at) };
 }
 function snapshotFrom(row: DbRow): PlayerSnapshot {
   return { minecraftUuid: String(row.minecraft_uuid), name: String(row.name), playtimeSeconds: Number(row.playtime_seconds), blocksBroken: Number(row.blocks_broken), kills: Number(row.kills), deaths: Number(row.deaths), distanceMeters: Number(row.distance_meters), balance: Number(row.balance), rankName: String(row.rank_name), worldName: row.world_name ? String(row.world_name) : null, updatedAt: timestamp(row.updated_at) };
@@ -61,11 +61,11 @@ export class PostgresStore implements ControlPlaneStore {
 
   async recordHeartbeat(heartbeat: Omit<ServerHeartbeat, "receivedAt">): Promise<ServerHeartbeat> {
     const { rows } = await this.pool.query(
-      `INSERT INTO server_heartbeats (server_id, online, tps, player_count, worlds, players, version, uptime_seconds)
-       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8)
-       ON CONFLICT (server_id) DO UPDATE SET online = EXCLUDED.online, tps = EXCLUDED.tps, player_count = EXCLUDED.player_count, worlds = EXCLUDED.worlds, players = EXCLUDED.players, version = EXCLUDED.version, uptime_seconds = EXCLUDED.uptime_seconds, received_at = NOW()
+      `INSERT INTO server_heartbeats (server_id, online, tps, player_count, worlds, world_players, players, version, uptime_seconds)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9)
+       ON CONFLICT (server_id) DO UPDATE SET online = EXCLUDED.online, tps = EXCLUDED.tps, player_count = EXCLUDED.player_count, worlds = EXCLUDED.worlds, world_players = EXCLUDED.world_players, players = EXCLUDED.players, version = EXCLUDED.version, uptime_seconds = EXCLUDED.uptime_seconds, received_at = NOW()
        RETURNING *`,
-      [heartbeat.serverId, heartbeat.online, heartbeat.tps, heartbeat.playerCount, JSON.stringify(heartbeat.worlds), JSON.stringify(heartbeat.players), heartbeat.version, heartbeat.uptimeSeconds]
+      [heartbeat.serverId, heartbeat.online, heartbeat.tps, heartbeat.playerCount, JSON.stringify(heartbeat.worlds), JSON.stringify(heartbeat.worldPlayers), JSON.stringify(heartbeat.players), heartbeat.version, heartbeat.uptimeSeconds]
     );
     return heartbeatFrom(rows[0]);
   }

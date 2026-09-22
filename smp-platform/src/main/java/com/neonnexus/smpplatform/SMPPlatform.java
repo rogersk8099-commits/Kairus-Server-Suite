@@ -189,6 +189,15 @@ public final class SMPPlatform extends JavaPlugin {
             payload.addProperty("playerCount", Bukkit.getOnlinePlayers().size()); payload.addProperty("version", getDescription().getVersion());
             payload.addProperty("uptimeSeconds", Math.max(0L, Duration.between(startedAt, Instant.now()).toSeconds()));
             JsonArray worlds = new JsonArray(); for (World world : Bukkit.getWorlds()) worlds.add(world.getName()); payload.add("worlds", worlds);
+            JsonArray worldPlayers = new JsonArray();
+            for (WorldDefinition definition : registry.snapshot().worlds().values()) {
+                World world = Bukkit.getWorld(definition.minecraftWorldName());
+                JsonObject detail = new JsonObject();
+                detail.addProperty("id", definition.id()); detail.addProperty("name", definition.displayName());
+                detail.addProperty("playerCount", world == null ? 0 : world.getPlayers().size()); detail.addProperty("status", definition.status().name());
+                worldPlayers.add(detail);
+            }
+            payload.add("worldPlayers", worldPlayers);
             JsonArray players = new JsonArray(); for (Player player : Bukkit.getOnlinePlayers()) players.add(player.getName()); payload.add("players", players);
             postControlPlane("/api/plugin/heartbeat", payload);
         }, 20L, 1_200L);

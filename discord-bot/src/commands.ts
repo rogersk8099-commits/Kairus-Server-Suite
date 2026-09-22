@@ -108,8 +108,9 @@ export async function dispatchComponent(interaction: Component, deps: CommandDep
 
 async function requestNukeChannel(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!has(interaction, PermissionFlagsBits.ManageChannels)) return ephemeral(interaction, "Manage Channels is required.");
-  const channel = interaction.options.getChannel("channel", true);
-  if (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) return ephemeral(interaction, "Only text and announcement channels can be recreated.");
+  const selected = interaction.options.getChannel("channel", true);
+  const channel = await interaction.guild?.channels.fetch(selected.id).catch(() => null);
+  if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) return ephemeral(interaction, "Only text and announcement channels can be recreated.");
   if (!channel.deletable) return ephemeral(interaction, "I cannot delete that channel. Check the bot's Manage Channels permission and role position.");
   const customId = `kairu:nuke-channel:confirm:${interaction.user.id}:${channel.id}`;
   await interaction.reply({ content: `This will clone and then permanently delete ${channel}. Messages cannot be restored. Continue?`, ephemeral: true, allowedMentions: noMentions, components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(customId).setLabel("Clone and delete channel").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`kairu:nuke-channel:cancel:${interaction.user.id}:${channel.id}`).setLabel("Cancel").setStyle(ButtonStyle.Secondary))] });
@@ -122,8 +123,8 @@ async function handleNukeChannel(interaction: ButtonInteraction, deps: CommandDe
   if (interaction.user.id !== ownerId) return ephemeral(interaction, "Only the staff member who requested this confirmation can use it.");
   if (!has(interaction, PermissionFlagsBits.ManageChannels)) return ephemeral(interaction, "Manage Channels is required.");
   if (action === "cancel") { await interaction.update({ content: "Channel reset cancelled.", components: [] }); return; }
-  const channel = await deps.client.channels.fetch(channelId).catch(() => null);
-  if (!channel || channel.guildId !== interaction.guildId || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) return ephemeral(interaction, "That channel no longer exists or cannot be recreated.");
+  const channel = await interaction.guild?.channels.fetch(channelId).catch(() => null);
+  if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) return ephemeral(interaction, "That channel no longer exists or cannot be recreated.");
   if (!channel.deletable) return ephemeral(interaction, "I cannot delete that channel. Check my permissions and role position.");
   const replacement = await channel.clone({ reason: `Kairu channel reset confirmed by ${interaction.user.id}` });
   await deps.database.discordSetupResource.updateMany({ where: { guildId: interaction.guildId!, discordId: channel.id }, data: { discordId: replacement.id } });

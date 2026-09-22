@@ -328,7 +328,7 @@ export const primaryMinecraftCommand: CommandModule = {
   definition: guildOnlyDefinition({ name: "primary-minecraft", description: "Set your primary Minecraft account", options: [{ type: 3, name: "minecraft_uuid", description: "UUID shown by /minecraft-accounts", required: true, min_length: 36, max_length: 36 }] }),
   async execute(interaction, services) {
     await deferEphemeral(interaction);
-    const minecraftUuid = interaction.options.getString("minecraft_uuid", true);
+    const minecraftUuid = interaction.options.getString("minecraft_uuid", true) ?? "";
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(minecraftUuid)) return respond(interaction, { ephemeral: true, content: "Use the UUID shown by /minecraft-accounts." });
     try { const changed = await services.links.setPrimaryMinecraftAccount(interaction.user.id, minecraftUuid); return respond(interaction, { ephemeral: true, content: changed ? "Your primary Minecraft account has been updated." : "That Minecraft account is not linked to your Discord account." }); }
     catch (error) { await respondServiceFailure(interaction, services.logger, "primary-minecraft", error); }

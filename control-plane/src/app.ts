@@ -6,6 +6,7 @@ import { registerAuthRoutes } from "./auth/routes.js";
 import type { AuthStore } from "./auth/types.js";
 import { AppError } from "./errors.js";
 import { getBearerToken, hashLinkCode, safeSecretEquals } from "./security.js";
+import { hashAuthValue } from "./auth/security.js";
 import { bridgeEventTypes, type AppConfig, type ControlPlaneStore, type PlayerSnapshot } from "./types.js";
 
 const uuid = z.string().uuid();
@@ -197,6 +198,28 @@ export function buildApp(config: AppConfig, store: ControlPlaneStore, authStore?
   });
 
   if (authStore) registerAuthRoutes(app, config, authStore);
+
+  app.post("/internal/portal/overview", async (request) => {
+    if (!authStore || !config.websiteApiSecret || !config.sessionSecret || !safeSecretEquals(getBearerToken(request.headers.authorization), config.websiteApiSecret)) throw new AppError(401, "UNAUTHORIZED", "Website authentication is required");
+    const body = z.object({ sessionToken: z.string().min(32).max(256) }).strict().parse(request.body);
+    const session = await authStore.validateSession(hashAuthValue(config.sessionSecret, "session", body.sessionToken));
+    if (!session) throw new AppError(401, "SESSION_INVALID", "Session is invalid, expired, or revoked");
+    const discordUserId = await authStore.getDiscordUserId(session.user.id);
+    if (!discordUserId) return { user: session.user, accounts: [], primary: null, statistics: null };
+    const accounts = await store.getLinksByDiscordUser(discordUserId);
+    const primary = accounts.find((account) => account.isPrimary) ?? accounts[0] ?? null;
+    return { user: session.user, accounts, primary, statistics: primary ? await store.getPlayerSnapshot(primary.minecraftUuid) : null };
+  });
+  app.post("/internal/portal/achievements", async (request) => {
+    if (!authStore || !config.websiteApiSecret || !config.sessionSecret || !safeSecretEquals(getBearerToken(request.headers.authorization), config.websiteApiSecret)) throw new AppError(401, "UNAUTHORIZED", "Website authentication is required");
+    const body = z.object({ sessionToken: z.string().min(32).max(256) }).strict().parse(request.body);
+    const session = await authStore.validateSession(hashAuthValue(config.sessionSecret, "session", body.sessionToken));
+    if (!session) throw new AppError(401, "SESSION_INVALID", "Session is invalid, expired, or revoked");
+    const discordUserId = await authStore.getDiscordUserId(session.user.id);
+    if (!discordUserId) return { achievements: [] };
+    const primary = (await store.getLinksByDiscordUser(discordUserId)).find((account) => account.isPrimary) ?? null;
+    return { achievements: primary ? achievements(await store.getPlayerSnapshot(primary.minecraftUuid)) : [] };
+  });
 
   app.get("/health", async () => ({ status: "ok", storage: store.kind, timestamp: new Date().toISOString() }));
 

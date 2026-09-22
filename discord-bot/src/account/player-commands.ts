@@ -318,7 +318,8 @@ export const minecraftAccountsCommand: CommandModule = {
     try {
       const links = await services.links.getLinksByDiscordUser(interaction.user.id);
       if (!links.length) return respond(interaction, { ephemeral: true, content: "You have no linked Minecraft accounts. Use /link-minecraft to add one." });
-      return respond(interaction, { ephemeral: true, content: `${links.map((link) => `${link.isPrimary ? "⭐ **Primary**" : "•"} **${escapeDiscord(link.minecraftUsername, 16)}**\\n\\`${link.minecraftUuid}\\``).join("\\n")}\\n\\nUse /primary-minecraft with an account UUID to change your primary account.` });
+      const accountList = links.map((link) => `${link.isPrimary ? "⭐ **Primary**" : "•"} **${escapeDiscord(link.minecraftUsername, 16)}**\n\`${link.minecraftUuid}\``).join("\n");
+      return respond(interaction, { ephemeral: true, content: `${accountList}\n\nUse /primary-minecraft with an account UUID to change your primary account.` });
     } catch (error) { await respondServiceFailure(interaction, services.logger, "minecraft-accounts", error); }
   }
 };

@@ -180,6 +180,11 @@ export class PostgresAuthStore implements AuthStore {
     return rows[0] ? sessionFrom(rows[0]) : null;
   }
 
+  async getDiscordUserId(userId: string): Promise<string | null> {
+    const { rows } = await this.pool.query("SELECT provider_account_id FROM oauth_identities WHERE user_id = $1 AND provider = 'discord' LIMIT 1", [userId]);
+    return rows[0]?.provider_account_id ? String(rows[0].provider_account_id) : null;
+  }
+
   async revokeSession(sessionHash: string): Promise<boolean> {
     const result = await this.pool.query(
       "UPDATE auth_sessions SET revoked_at = NOW() WHERE session_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()",

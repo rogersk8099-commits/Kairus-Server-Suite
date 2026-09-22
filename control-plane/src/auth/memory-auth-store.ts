@@ -86,6 +86,8 @@ export class MemoryAuthStore implements AuthStore {
     return user ? { id: session.id, user: { ...user }, expiresAt: session.expiresAt.toISOString() } : null;
   }
 
+  async getDiscordUserId(userId: string): Promise<string | null> { return [...this.discordUsers.entries()].find(([, platformUserId]) => platformUserId === userId)?.[0] ?? null; }
+
   async revokeSession(sessionHash: string): Promise<boolean> {
     const session = this.sessions.get(sessionHash);
     if (!session || session.revokedAt || session.expiresAt <= this.now()) return false;

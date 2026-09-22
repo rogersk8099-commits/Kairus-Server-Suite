@@ -35,6 +35,7 @@ export interface AuthStore {
     sessionExpiresAt: Date,
   ): Promise<AuthSession | null>;
   validateSession(sessionHash: string): Promise<AuthSession | null>;
+  getDiscordUserId(userId: string): Promise<string | null>;
   revokeSession(sessionHash: string): Promise<boolean>;
   cleanupAuthArtifacts(): Promise<void>;
 }

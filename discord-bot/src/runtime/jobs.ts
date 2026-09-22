@@ -122,7 +122,7 @@ export class RuntimeJobs {
   private async bridgeEvents(guildId: string): Promise<void> {
     const [status, result] = await Promise.all([
       this.api.get<{ online: boolean; heartbeat: null | { online: boolean; receivedAt: string } }>("/api/server/status"),
-      this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string; worldName: string | null; minecraftName: string | null }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`)
+      this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string; worldName: string | null; minecraftUuid: string | null; minecraftName: string | null }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`)
     ]);
     if (!result.events.length) return;
     const heartbeatAge = status.heartbeat ? Date.now() - new Date(status.heartbeat.receivedAt).getTime() : Number.POSITIVE_INFINITY;
@@ -139,11 +139,21 @@ export class RuntimeJobs {
         if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
         continue;
       }
+      // Both KairuBridge and SMPPlatform can observe a Paper join in mixed
+      // installations. Only publish one global join notice for that connection.
+      if (event.eventType === "PLAYER_JOIN") {
+        const identity = event.minecraftUuid ?? event.minecraftName ?? event.id;
+        if (!await this.dedupe.claim(`minecraft-player-join:${guildId}:${identity}`, 90_000, { eventId: event.id })) {
+          if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
+          continue;
+        }
+      }
       const channel = await this.mappedChannel(guildId, event.eventType, "text-channel.game-chat");
       if (channel) {
+        const lifecycle = event.eventType === "PLAYER_JOIN" || event.eventType === "PLAYER_LEAVE";
         const embed = new EmbedBuilder().setColor(0x8b5cf6).setTitle(`Kairu SMP • ${event.eventType.replaceAll("_", " ")}`).setDescription(event.content.slice(0, 4_096)).setTimestamp(new Date(event.receivedAt));
-        if (event.worldName) embed.addFields({ name: "World", value: event.worldName.slice(0, 1_024), inline: true });
-        if (event.minecraftName) embed.addFields({ name: "Player", value: event.minecraftName.slice(0, 1_024), inline: true });
+        if (!lifecycle && event.worldName) embed.addFields({ name: "World", value: event.worldName.slice(0, 1_024), inline: true });
+        if (!lifecycle && event.minecraftName) embed.addFields({ name: "Player", value: event.minecraftName.slice(0, 1_024), inline: true });
         await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
       }
       if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;

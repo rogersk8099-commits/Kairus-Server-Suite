@@ -25,7 +25,7 @@ public final class AdminScreen extends Screen {
     public AdminScreen(){super(Component.literal("Kairu SMP"));}
     @Override public boolean isPauseScreen(){return false;}
     @Override protected void init(){build();}
-    private void go(String next){route=next;page=0;query="";build();if(next.equals("guilds"))KairuClient.request("guild-summary");if(next.equals("guild-top"))KairuClient.request("guild-top");if(next.equals("guild-invites"))KairuClient.request("guild-invites");if(next.equals("points"))KairuClient.request("points-summary");}
+    private void go(String next){route=next;page=0;query="";build();if(next.equals("guilds")||next.equals("guild-create"))KairuClient.request("guild-summary");if(next.equals("guild-top"))KairuClient.request("guild-top");if(next.equals("guild-invites"))KairuClient.request("guild-invites");if(next.equals("points"))KairuClient.request("points-summary");}
     @Override public void tick(){
         if(!KairuClient.connected()||KairuClient.state==null){onClose();return;}
         if(seenRevision!=KairuClient.revision){seenRevision=KairuClient.revision;build();}

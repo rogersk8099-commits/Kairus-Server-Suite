@@ -99,6 +99,35 @@ const queueChatSchema = z.object({
   if (!value.discordMessageId && !value.idempotencyKey) context.addIssue({ code: z.ZodIssueCode.custom, message: "discordMessageId or idempotencyKey is required", path: ["idempotencyKey"] });
 });
 
+/**
+ * Initial central registry. It deliberately mirrors SMPPlatform's seven built-in
+ * worlds so enabling central sync never leaves a Minekeep server on a 404/cache.
+ */
+const centralWorldRegistry = {
+  revision: 1,
+  generatedAt: "2026-09-01T00:00:00.000Z",
+  worlds: [
+    registryWorld("spawn-hub", "Spawn Hub", "hub", "Permanent", "LIVE", "Peaceful", 0, "DISABLED", false, false, "HUB_POINTS", "HUB_GROUP", "none", false),
+    registryWorld("ashfall", "Ashfall", "survival", "Season 7", "LIVE", "Hard", 24_000, "ENABLED", true, true, "NEXUS_POINTS", "ASHFALL_GROUP", "none", false),
+    registryWorld("obsidian-gate", "Obsidian Gate", "hardcore", "Season 7", "LIVE", "Brutal", 8_000, "ENABLED", true, true, "HARDCORE_POINTS", "HARDCORE_GROUP", "manual", false),
+    registryWorld("atrium", "The Atrium", "creative", "Permanent", "LIVE", "Peaceful", 0, "DISABLED", true, true, "BUILD_POINTS", "CREATIVE_GROUP", "none", false),
+    registryWorld("colosseum", "Neon Colosseum", "event", "Rotating", "LIVE", "Normal", 0, "EVENT_CONTROLLED", true, true, "EVENT_POINTS", "EVENT_GROUP", "manual", false),
+    registryWorld("quarry", "The Quarry", "resource", "Weekly Reset", "SEASONAL", "Normal", 12_000, "DISABLED", true, true, "NEXUS_POINTS", "ASHFALL_GROUP", "weekly", false),
+    registryWorld("verdance", "Verdance", "archive", "Season 6", "ARCHIVED", "Hard", 20_000, "DISABLED", false, false, "NEXUS_POINTS", "ARCHIVE_GROUP", "none", true)
+  ]
+};
+
+function registryWorld(id: string, displayName: string, type: string, season: string, status: string, difficulty: string, borderSize: number, pvpMode: string, guildsEnabled: boolean, pointsEnabled: boolean, currencyId: string, inventoryGroup: string, reset: "none" | "manual" | "weekly", archive: boolean) {
+  return {
+    id, minecraftWorldName: id, displayName, description: `${displayName} world.`, type, season, status, difficulty, borderSize, pvpMode,
+    guildsEnabled, pointsEnabled, currencyId, claimsEnabled: false, economyEnabled: false, inventoryGroup,
+    resetPolicy: reset === "weekly" ? { kind: "weekly", day: "MONDAY", time: "04:00", timezone: "UTC", safetyBackupRequired: true } : reset === "manual" ? { kind: "manual", reason: "Managed by Kairu SMP administration" } : { kind: "none" },
+    archivePolicy: { tourMode: archive, blockBreakDenied: archive, blockPlaceDenied: archive, containerMutationDenied: archive, terrainDamageDenied: archive },
+    discordEnabled: id !== "spawn-hub", websiteVisible: true, mapVisible: true, playerCount: 0, maintenanceMode: false,
+    accessPermission: `smpplatform.world.${id}`, spawnLocation: { worldName: id, x: 0.5, y: 80.0, z: 0.5, yaw: 0, pitch: 0 }
+  };
+}
+
 function chatProjection(message: Awaited<ReturnType<ControlPlaneStore["listQueuedChatMessages"]>>[number]) {
   return {
     id: message.id,
@@ -228,6 +257,13 @@ export function buildApp(config: AppConfig, store: ControlPlaneStore, authStore?
   });
 
   app.get("/health", async () => ({ status: "ok", storage: store.kind, timestamp: new Date().toISOString() }));
+
+  app.get("/v1/minecraft/world-registry", async (request) => {
+    // Registry bootstrap predates the server-id header; authenticate it with the
+    // plugin bearer secret while keeping heartbeat/command routes server-scoped.
+    if (!config.pluginApiKey || !safeSecretEquals(getBearerToken(request.headers.authorization), config.pluginApiKey)) throw new AppError(401, "UNAUTHORIZED", "Invalid plugin credentials");
+    return centralWorldRegistry;
+  });
 
   app.get("/api/server/status", async () => {
     const heartbeat = await store.getLatestHeartbeat();

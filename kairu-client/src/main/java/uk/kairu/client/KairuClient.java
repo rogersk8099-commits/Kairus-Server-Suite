@@ -43,7 +43,8 @@ public final class KairuClient implements ClientModInitializer {
                 if(client.gui.screen() instanceof AdminScreen)client.gui.setScreen(null);
                 notice("No reply from the Kairu server plugin. The menu was not opened or has been closed.");
             }
-            if(client.gui.screen() instanceof AdminScreen&&pending==null&&now-lastReply>5000)request("status");
+            // The menu is command-driven. Polling status while a form is open rebuilds the screen
+            // and interrupts text entry; connection events above already close it on disconnect.
         });
         ClientReceiveMessageEvents.ALLOW_GAME.register((component,overlay)->{
             String text=component.getString();

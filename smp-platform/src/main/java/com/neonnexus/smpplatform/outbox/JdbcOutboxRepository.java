@@ -13,11 +13,12 @@ import java.util.UUID;
 
 /** PostgreSQL implementation. All calls must be made by the configured IO executor. */
 public final class JdbcOutboxRepository implements OutboxRepository {
+    private static final String TABLE = "smp_platform_event_outbox";
     private final DataSource dataSource;
     public JdbcOutboxRepository(DataSource dataSource) { this.dataSource = Objects.requireNonNull(dataSource); }
 
     @Override public EnqueueResult enqueue(OutboxEvent event) {
-        String sql = "INSERT INTO smp_event_outbox (id,aggregate_type,aggregate_id,event_type,idempotency_key,payload,status,attempt_count,available_at,created_at,updated_at) VALUES (?,?,?,?,?,CAST(? AS jsonb),'PENDING',0,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING";
+        String sql = "INSERT INTO " + TABLE + " (id,aggregate_type,aggregate_id,event_type,idempotency_key,payload,status,attempt_count,available_at,created_at,updated_at) VALUES (?,?,?,?,?,CAST(? AS jsonb),'PENDING',0,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING";
         try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
             Timestamp now = Timestamp.from(event.createdAt());
             statement.setObject(1, event.id()); statement.setString(2, event.aggregateType()); statement.setString(3, event.aggregateId()); statement.setString(4, event.eventType()); statement.setString(5, event.idempotencyKey()); statement.setString(6, event.payloadJson()); statement.setTimestamp(7, Timestamp.from(event.availableAt())); statement.setTimestamp(8, now); statement.setTimestamp(9, now);
@@ -28,23 +29,23 @@ public final class JdbcOutboxRepository implements OutboxRepository {
 
     @Override public List<OutboxEvent> claimDue(Instant now, Instant leaseUntil, int limit) {
         if (limit < 1) throw new IllegalArgumentException("limit must be positive");
-        String sql = "WITH candidates AS (SELECT id FROM smp_event_outbox WHERE (status='PENDING' AND available_at<=?) OR (status='LEASED' AND lease_until<?) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT ?) " +
-                "UPDATE smp_event_outbox e SET status='LEASED', lease_until=?, updated_at=? FROM candidates c WHERE e.id=c.id RETURNING e.*";
+        String sql = "WITH candidates AS (SELECT id FROM " + TABLE + " WHERE (status='PENDING' AND available_at<=?) OR (status='LEASED' AND lease_until<?) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT ?) " +
+                "UPDATE " + TABLE + " e SET status='LEASED', lease_until=?, updated_at=? FROM candidates c WHERE e.id=c.id RETURNING e.*";
         try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
             connection.setAutoCommit(false);
             statement.setTimestamp(1, Timestamp.from(now)); statement.setTimestamp(2, Timestamp.from(now)); statement.setInt(3, limit); statement.setTimestamp(4, Timestamp.from(leaseUntil)); statement.setTimestamp(5, Timestamp.from(now));
             List<OutboxEvent> claimed = new ArrayList<>();
             try (ResultSet results = statement.executeQuery()) { while (results.next()) claimed.add(read(results)); }
             connection.commit(); return claimed;
-        } catch (Exception exception) { throw new OutboxPersistenceException("Unable to claim outbox smp_events", exception); }
+        } catch (Exception exception) { throw new OutboxPersistenceException("Unable to claim SMPPlatform outbox", exception); }
     }
 
     @Override public void acknowledgeDelivered(OutboxEvent event, Instant deliveredAt) {
-        update("UPDATE smp_event_outbox SET status='DELIVERED', delivered_at=?, lease_until=NULL, last_error=NULL, updated_at=? WHERE id=? AND status='LEASED'", event.id(), deliveredAt, deliveredAt, null, false);
+        update("UPDATE " + TABLE + " SET status='DELIVERED', delivered_at=?, lease_until=NULL, last_error=NULL, updated_at=? WHERE id=? AND status='LEASED'", event.id(), deliveredAt, deliveredAt, null, false);
     }
     @Override public void retry(OutboxEvent event, Instant nextAttemptAt, String error, boolean terminal) {
         String status = terminal ? "DEAD" : "PENDING";
-        String sql = "UPDATE smp_event_outbox SET status=?, attempt_count=attempt_count+1, available_at=?, lease_until=NULL, last_error=?, updated_at=? WHERE id=? AND status='LEASED'";
+        String sql = "UPDATE " + TABLE + " SET status=?, attempt_count=attempt_count+1, available_at=?, lease_until=NULL, last_error=?, updated_at=? WHERE id=? AND status='LEASED'";
         try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) { s.setString(1, status); s.setTimestamp(2, Timestamp.from(nextAttemptAt)); s.setString(3, abbreviate(error)); s.setTimestamp(4, Timestamp.from(Instant.now())); s.setObject(5, event.id()); s.executeUpdate(); }
         catch (Exception exception) { throw new OutboxPersistenceException("Unable to reschedule outbox event", exception); }
     }
@@ -53,7 +54,7 @@ public final class JdbcOutboxRepository implements OutboxRepository {
         catch (Exception exception) { throw new OutboxPersistenceException("Unable to acknowledge outbox event", exception); }
     }
     private OutboxEvent findByIdempotency(Connection connection, String key) throws Exception {
-        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM smp_event_outbox WHERE idempotency_key=?")) { statement.setString(1, key); try (ResultSet results = statement.executeQuery()) { if (!results.next()) throw new IllegalStateException("Outbox idempotency conflict row was not found"); return read(results); } }
+        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + TABLE + " WHERE idempotency_key=?")) { statement.setString(1, key); try (ResultSet results = statement.executeQuery()) { if (!results.next()) throw new IllegalStateException("Outbox idempotency conflict row was not found"); return read(results); } }
     }
     private static OutboxEvent read(ResultSet results) throws Exception {
         Timestamp lease = results.getTimestamp("lease_until"), delivered = results.getTimestamp("delivered_at");

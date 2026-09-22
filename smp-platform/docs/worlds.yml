@@ -9,7 +9,7 @@ registry:
 worlds:
   ashfall:
     id: ashfall
-    minecraft-world-name: nx_ashfall
+    minecraft-world-name: ashfall
     display-name: "Ashfall"
     public-type: "Survival"
     module-type: SURVIVAL
@@ -38,7 +38,7 @@ worlds:
     maintenance-mode: false
   obsidian-gate:
     id: obsidian-gate
-    minecraft-world-name: nx_obsidian_gate
+    minecraft-world-name: obsidian-gate
     display-name: "Obsidian Gate"
     public-type: "Hardcore"
     module-type: HARDCORE
@@ -68,7 +68,7 @@ worlds:
     maintenance-mode: false
   atrium:
     id: atrium
-    minecraft-world-name: nx_atrium
+    minecraft-world-name: atrium
     display-name: "The Atrium"
     public-type: "Creative"
     module-type: CREATIVE
@@ -98,7 +98,7 @@ worlds:
     plotsquared: {enabled: true, plot-size: 128, road-width: 7, area-id: "atrium_main"}
   colosseum:
     id: colosseum
-    minecraft-world-name: nx_colosseum
+    minecraft-world-name: colosseum
     display-name: "Neon Colosseum"
     public-type: "Events"
     module-type: EVENT
@@ -127,7 +127,7 @@ worlds:
     maintenance-mode: false
   quarry:
     id: quarry
-    minecraft-world-name: nx_quarry
+    minecraft-world-name: quarry
     display-name: "The Quarry"
     public-type: "Resource"
     module-type: RESOURCE
@@ -162,7 +162,7 @@ worlds:
     maintenance-mode: false
   verdance:
     id: verdance
-    minecraft-world-name: nx_verdance
+    minecraft-world-name: verdance
     display-name: "Verdance"
     public-type: "Survival"
     module-type: ARCHIVE

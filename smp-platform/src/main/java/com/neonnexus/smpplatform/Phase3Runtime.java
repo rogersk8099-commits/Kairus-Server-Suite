@@ -93,7 +93,7 @@ final class Phase3Runtime implements Listener {
     static Phase3Runtime start(JavaPlugin plugin, DataSource dataSource, Executor io, Clock clock, PlatformConfiguration.Points.AutomaticReward firstJoinReward, PlatformConfiguration.Points.AutomaticReward featuredBuildReward, PlatformConfiguration.Guilds guildConfiguration) {
         JdbcTransactionRunner transactions = new JdbcTransactionRunner(dataSource);
         OutboxRepository outbox = new JdbcOutboxRepository(dataSource);
-        Phase3EventPublisher publisher = new DurablePublisher(outbox, clock);
+        Phase3EventPublisher publisher = new DurablePublisher(outbox, clock, plugin.getLogger());
         AuditSink audit = new JdbcAuditSink(dataSource, plugin, clock);
         WorldPolicy policy = WorldPolicy.defaults();
         PlayerDirectory directory = new CachedPlayerDirectory();
@@ -363,10 +363,12 @@ final class Phase3Runtime implements Listener {
     private static final class DurablePublisher implements Phase3EventPublisher {
         private final OutboxRepository outbox;
         private final Clock clock;
+        private final java.util.logging.Logger logger;
         private final Gson gson = new Gson();
-        private DurablePublisher(OutboxRepository outbox, Clock clock) {
+        private DurablePublisher(OutboxRepository outbox, Clock clock, java.util.logging.Logger logger) {
             this.outbox = outbox;
             this.clock = clock;
+            this.logger = logger;
         }
         @Override public void guildCreated(Guild guild) {
             enqueue("guild", guild.id(), "GUILD_CREATED", "guild-created:" + guild.id(),
@@ -390,7 +392,12 @@ final class Phase3Runtime implements Listener {
         }
         private void enqueue(String type, UUID id, String event, String key, Map<String, ?> payload) {
             Instant now = clock.instant();
-            outbox.enqueue(OutboxEvent.pending(type, id.toString(), event, key, gson.toJson(payload), now));
+            try {
+                outbox.enqueue(OutboxEvent.pending(type, id.toString(), event, key, gson.toJson(payload), now));
+            } catch (RuntimeException exception) {
+                // Local gameplay has already been committed. A Control Plane transport problem must not undo or misreport it.
+                logger.warning("Local " + event + " was committed, but its bridge event could not be queued: " + exception.getClass().getSimpleName());
+            }
         }
     }
 

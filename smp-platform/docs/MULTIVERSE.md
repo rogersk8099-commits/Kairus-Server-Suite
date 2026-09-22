@@ -12,11 +12,11 @@ Multiverse-Inventories is optional but recommended. Its purpose is per-world/gro
 
 | Group | Members | Required verification |
 |---|---|---|
-| `ASHFALL_GROUP` | `nx_ashfall`, `nx_quarry` | intended sharing is enabled and documented |
-| `HARDCORE_GROUP` | `nx_obsidian_gate` | no Ashfall sharing under any configuration |
-| `CREATIVE_GROUP` | `nx_atrium` | creative inventory does not bleed into survival |
-| `EVENT_GROUP` | `nx_colosseum` | event loadout is restored/reset per policy |
-| `ARCHIVE_GROUP` | `nx_verdance` | tour inventory carries no modification privilege |
+| `ASHFALL_GROUP` | `ashfall`, `quarry` | intended sharing is enabled and documented |
+| `HARDCORE_GROUP` | `obsidian-gate` | no Ashfall sharing under any configuration |
+| `CREATIVE_GROUP` | `atrium` | creative inventory does not bleed into survival |
+| `EVENT_GROUP` | `colosseum` | event loadout is restored/reset per policy |
+| `ARCHIVE_GROUP` | `verdance` | tour inventory carries no modification privilege |
 
 At startup, validate every configured Minecraft world folder resolves to one registry ID and group. Do not permit an unvalidated Multiverse world name as a `/worlds teleport` target. If Multiverse is unavailable, show degraded world-management health and block destructive lifecycle actions. If Multiverse-Inventories is absent, block or explicitly warn for world transitions whose isolation guarantee cannot be met; **never** silently allow Obsidian Gate to share survival inventory.
 

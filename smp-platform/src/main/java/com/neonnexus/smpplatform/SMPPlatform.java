@@ -154,9 +154,23 @@ public final class SMPPlatform extends JavaPlugin {
         List<WorldDefinition> changed = new ArrayList<>();
         for (WorldDefinition world : bundled.worlds()) {
             PlatformConfiguration.WorldFile.WorldOverride override = configuration.worlds().overrides().get(world.id());
-            changed.add(override == null ? world : new WorldDefinition(world.id(), override.minecraftWorldName(), world.displayName(), world.description(), world.type(), world.season(), world.status(), world.difficulty(), world.borderSize(), world.pvpMode(), world.guildsEnabled(), world.pointsEnabled(), world.currencyId(), world.claimsEnabled(), world.economyEnabled(), world.inventoryGroup(), world.resetPolicy(), world.archivePolicy(), world.discordEnabled(), world.websiteVisible(), world.mapVisible(), world.playerCount(), override.maintenanceMode(), world.accessPermission(), new com.neonnexus.smpplatform.world.SpawnLocation(override.minecraftWorldName(), world.spawnLocation().x(), world.spawnLocation().y(), world.spawnLocation().z(), world.spawnLocation().yaw(), world.spawnLocation().pitch())));
+            if (override == null) { changed.add(world); continue; }
+            String worldName = normalizeLegacyNxWorldName(world.id(), override.minecraftWorldName());
+            if (!worldName.equals(override.minecraftWorldName())) getLogger().warning("Normalised legacy world mapping " + override.minecraftWorldName() + " to " + worldName + "; nx_ world folders are not used by Kairu SMP.");
+            changed.add(new WorldDefinition(world.id(), worldName, world.displayName(), world.description(), world.type(), world.season(), world.status(), world.difficulty(), world.borderSize(), world.pvpMode(), world.guildsEnabled(), world.pointsEnabled(), world.currencyId(), world.claimsEnabled(), world.economyEnabled(), world.inventoryGroup(), world.resetPolicy(), world.archivePolicy(), world.discordEnabled(), world.websiteVisible(), world.mapVisible(), world.playerCount(), override.maintenanceMode(), world.accessPermission(), new com.neonnexus.smpplatform.world.SpawnLocation(worldName, world.spawnLocation().x(), world.spawnLocation().y(), world.spawnLocation().z(), world.spawnLocation().yaw(), world.spawnLocation().pitch())));
         }
         return new RegistryDocument(Math.max(bundled.revision(), configuration.worlds().initialRevision()), Instant.now(), changed);
+    }
+
+    /** One-way compatibility mapping for the short-lived nx_ bootstrap names; it never changes other custom names. */
+    private static String normalizeLegacyNxWorldName(String worldId, String configuredName) {
+        if (worldId.equals("ashfall") && configuredName.equalsIgnoreCase("nx_ashfall")) return "ashfall";
+        if (worldId.equals("obsidian-gate") && configuredName.equalsIgnoreCase("nx_obsidian_gate")) return "obsidian-gate";
+        if (worldId.equals("atrium") && configuredName.equalsIgnoreCase("nx_atrium")) return "atrium";
+        if (worldId.equals("colosseum") && configuredName.equalsIgnoreCase("nx_colosseum")) return "colosseum";
+        if (worldId.equals("quarry") && configuredName.equalsIgnoreCase("nx_quarry")) return "quarry";
+        if (worldId.equals("verdance") && configuredName.equalsIgnoreCase("nx_verdance")) return "verdance";
+        return configuredName;
     }
 
     @Override public void onDisable() {
@@ -377,7 +391,7 @@ public final class SMPPlatform extends JavaPlugin {
         try {
             if (definition.id().equals("atrium")) {
                 if (!definition.minecraftWorldName().equalsIgnoreCase("atrium") && Bukkit.getWorld("atrium") != null) {
-                    sender.sendMessage("§e   Legacy world 'atrium' is loaded. It was not replaced and no duplicate nx_atrium world was created.");
+                    sender.sendMessage("§e   An existing Atrium world is loaded. It was not replaced and no duplicate world was created.");
                     sender.sendMessage("§7   Back up and remove the old world deliberately before recreating The Atrium.");
                     return;
                 }

@@ -120,12 +120,22 @@ export class RuntimeJobs {
   }
 
   private async bridgeEvents(guildId: string): Promise<void> {
-    const result = await this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string; worldName: string | null; minecraftName: string | null }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`);
+    const [status, result] = await Promise.all([
+      this.api.get<{ online: boolean; heartbeat: null | { online: boolean; receivedAt: string } }>("/api/server/status"),
+      this.api.get<{ events: Array<{ id: string; eventType: string; content: string; receivedAt: string; worldName: string | null; minecraftName: string | null }> }>(`/api/admin/bridge-events?after=${encodeURIComponent(this.bridgeCursor)}&limit=50`)
+    ]);
     if (!result.events.length) return;
+    const heartbeatAge = status.heartbeat ? Date.now() - new Date(status.heartbeat.receivedAt).getTime() : Number.POSITIVE_INFINITY;
+    const serverIsLive = status.online && status.heartbeat?.online === true && heartbeatAge >= 0 && heartbeatAge <= Math.max(120_000, this.config.STATUS_INTERVAL_MS * 3);
     for (const event of result.events) {
       // Service lifecycle is represented by the single persistent SERVER_STATUS embed.
       // Never turn each plugin restart/shutdown into a Discord channel message.
       if (["SERVER_STARTED", "SERVER_STOPPING", "MAINTENANCE"].includes(event.eventType)) {
+        if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
+        continue;
+      }
+      // A delayed outbox event must never announce a player joining after Minecraft is offline.
+      if (!serverIsLive) {
         if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
         continue;
       }

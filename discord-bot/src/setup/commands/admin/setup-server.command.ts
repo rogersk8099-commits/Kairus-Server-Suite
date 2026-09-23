@@ -38,18 +38,22 @@ export async function handleSetupServerCommand(
 
   const confirmed = interaction.options.getBoolean("confirm") === true;
   if (!confirmed) {
-    await interaction.reply({ ephemeral: true, content: buildSetupConfirmationSummary() });
+    await interaction.reply({ ephemeral: true, content: discordContent(buildSetupConfirmationSummary()) });
     return;
   }
 
   await interaction.deferReply({ ephemeral: true });
   try {
     const result = await dependencies.setupService.setup(new DiscordJsGuildSetupAdapter(interaction.guild));
-    await interaction.editReply(formatSetupResult(result));
+    await interaction.editReply(discordContent(formatSetupResult(result)));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown setup failure.";
-    await interaction.editReply(`**Kairu setup did not start.** ${message}`);
+    await interaction.editReply(discordContent(`**Kairu setup did not start.** ${message}`));
   }
+}
+
+function discordContent(value: string): string {
+  return value.length <= 2_000 ? value : `${value.slice(0, 1_940)}\n…additional detail is in the bot logs.`;
 }
 
 /** The preview is intentionally a confirmation checkpoint; no Discord mutation occurs until confirm:true. */
@@ -76,5 +80,8 @@ export function formatSetupResult(result: ServerSetupResult): string {
     lines.push(...failures.slice(0, 10).map((item) => `• ${item.key}: ${item.detail ?? "unknown failure"}`));
     if (failures.length > 10) lines.push(`• …and ${failures.length - 10} more.`);
   }
-  return lines.join("\n");
+  const output = lines.join("\n");
+  // Discord interaction responses are limited to 2,000 characters. A failed
+  // reconciliation can otherwise produce a long list and mask the real result.
+  return output.length <= 2_000 ? output : `${output.slice(0, 1_940)}\n• …additional results omitted; check the bot logs for full details.`;
 }

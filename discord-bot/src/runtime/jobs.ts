@@ -139,11 +139,12 @@ export class RuntimeJobs {
         if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
         continue;
       }
-      // Both KairuBridge and SMPPlatform can observe a Paper join in mixed
-      // installations. Only publish one global join notice for that connection.
-      if (event.eventType === "PLAYER_JOIN") {
+      // KairuBridge and SMPPlatform can both observe the same Paper lifecycle
+      // event in mixed installations. One notice per player/state is enough;
+      // keep the idempotency record long enough to absorb delayed duplicates.
+      if (event.eventType === "PLAYER_JOIN" || event.eventType === "PLAYER_LEAVE") {
         const identity = event.minecraftUuid ?? event.minecraftName ?? event.id;
-        if (!await this.dedupe.claim(`minecraft-player-join:${guildId}:${identity}`, 90_000, { eventId: event.id })) {
+        if (!await this.dedupe.claim(`minecraft-lifecycle:${guildId}:${event.eventType}:${identity}`, 10 * 60_000, { eventId: event.id })) {
           if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
           continue;
         }

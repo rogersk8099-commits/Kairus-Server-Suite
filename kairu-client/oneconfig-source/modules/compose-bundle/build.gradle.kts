@@ -1,0 +1,125 @@
+import net.fabricmc.loom.build.nesting.NestableJarGenerationTask
+import net.fabricmc.loom.task.NestJarsAction
+
+// ships as a standalone Fabric mod so the shaded Compose/skiko runtime can be published to
+// Modrinth separately and is excluded from the bootstrap JiJ in oneconfig-bootstrap.gradle.kts
+
+// NOTE: bump the prefix whenever the compose version changes: the "+compose.x.y.z" part is semver
+// build metadata, which version comparisons ignore, so updaters and dependency constraints
+// only see the prefix
+version = "1.0.4+compose.${libs.versions.compose.asProvider().get()}"
+
+repositories {
+    maven("https://redirector.kotlinlang.org/maven/compose-dev")
+}
+
+val shade: Configuration by configurations.creating {
+    isTransitive = true
+    exclude(group = "org.jetbrains.kotlin")
+    exclude(group = "org.jetbrains.androidx.lifecycle")
+    exclude(group = "org.jetbrains.kotlinx")
+    exclude(group = "org.jetbrains", module = "annotations")
+    // empty relocation shims whose jar filenames collide with the real androidx-coordinate artifacts of the same name and version
+    exclude(group = "org.jetbrains.compose.runtime")
+}
+
+fun isExcludedFromBundle(file: File): Boolean {
+    val artifact = shade.resolvedConfiguration.resolvedArtifacts.find { it.file == file }
+    return artifact?.moduleVersion?.id?.let { id ->
+        id.group == "org.jetbrains.kotlin" ||
+            id.group == "org.jetbrains.kotlinx" ||
+            (id.group == "org.jetbrains" && id.name == "annotations")
+    } ?: false
+}
+
+dependencies {
+    shade(libs.jetbrains.compose.foundation)
+    shade(libs.jetbrains.compose.material)
+    shade(libs.androidx.compose.runtime)
+    shade(libs.androidx.compose.runtime.saveable)
+    shade(libs.jetbrains.compose.ui)
+    shade(libs.jetbrains.compose.ui.tooling.preview)
+    shade(libs.jetbrains.compose.ui.util)
+    shade(libs.jetbrains.compose.ui.backhandler)
+    shade(libs.jetbrains.skiko.awt)
+    shade(libs.jetbrains.skiko.awt.runtime.windows.x64)
+    shade(libs.jetbrains.skiko.awt.runtime.linux.x64)
+    shade(libs.jetbrains.skiko.awt.runtime.linux.arm64)
+    shade(libs.jetbrains.skiko.awt.runtime.macos.x64)
+    shade(libs.jetbrains.skiko.awt.runtime.macos.arm64)
+    shade(libs.jetbrains.compose.navigation)
+    shade(libs.jetbrains.lifecycle)
+    shade(libs.jetbrains.viewmodel)
+}
+
+private fun createProcessTask(): TaskProvider<NestableJarGenerationTask> {
+
+    return project.tasks.register("processShadeJars", NestableJarGenerationTask::class.java) {
+        description = ""
+        from(shade)
+        outputDirectory.set(project.layout.buildDirectory.dir(name))
+        uncompressNestedJars.set(false)
+    }
+}
+
+val processTask = createProcessTask()
+
+processTask.configure {
+    doFirst {
+        val collisions = shade.resolvedConfiguration.resolvedArtifacts
+            .groupBy { it.file.name }
+            .filterValues { it.size > 1 }
+        check(collisions.isEmpty()) {
+            "Nested jar filename collisions in the compose bundle, exclude the redundant artifacts:\n" +
+                collisions.entries.joinToString("\n") { (name, artifacts) ->
+                    "  $name -> ${artifacts.map { it.moduleVersion.id }}"
+                }
+        }
+    }
+}
+
+private fun getOutputJars(): FileCollection {
+    return project.fileTree(processTask.flatMap(Transformer { it.outputDirectory })).matching { include("*.jar") }
+}
+
+tasks.jar {
+    dependsOn(processTask)
+
+    NestJarsAction.addToTask(this, getOutputJars())
+}
+
+tasks.jar {
+    exclude(
+        "kotlin/**",
+        "kotlinx/**",
+        "META-INF/kotlin-stdlib*.kotlin_module",
+        "META-INF/maven/org.jetbrains.kotlin/**",
+        "META-INF/maven/org.jetbrains/annotations/**",
+        "org/jetbrains/annotations/**",
+    )
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.processResources {
+    val props = mapOf("version" to project.version)
+    inputs.properties(props)
+    filesMatching("fabric.mod.json") { expand(props) }
+}
+
+apply(plugin = "oneconfig-compose-bundle-publish")
+
+val modPublishTasks = tasks.named("publishMods").get().dependsOn.toList()
+
+tasks.register("publishComposeBundle") {
+    group = "publishing"
+    description = "Publishes compose-bundle to the Polyfrost maven repositories and Modrinth."
+    dependsOn(tasks.withType<PublishToMavenRepository>(), modPublishTasks)
+}
+
+tasks.named("publish") {
+    setDependsOn(emptyList<Any>())
+}
+
+tasks.named("publishMods") {
+    setDependsOn(emptyList<Any>())
+}

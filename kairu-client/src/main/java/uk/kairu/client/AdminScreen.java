@@ -10,7 +10,14 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 import java.util.*;
 
-/** Independent native screen: no OneConfig, Compose, Kotlin, browser or shader dependencies. */
+/**
+ * Kairu's server-authoritative action surface.
+ *
+ * The distributable client embeds the pinned OneConfig Fabric bootstrap (see
+ * Build-OneConfig-Client.ps1). This action surface deliberately remains separate
+ * from persistent client settings: guild, point, plot, player and world changes
+ * are never stored locally and must be confirmed by SMPPlatform.
+ */
 public final class AdminScreen extends Screen {
     private static final int BG=0xFF12131A,SIDEBAR=0xFF0D0E14,CARD=0xFF1B1C27,HOVER=0xFF26283A,ACCENT=0xFFA97CFF,CYAN=0xFF5BDBFF,WHITE=0xFFF5F2FF,MUTED=0xFFAAA7B9,LINE=0xFF303244,GOOD=0xFF61D3A5;
     private String route="overview",target="",targetName="",query="",selectedFlag="",selectedFlagType="";
@@ -22,7 +29,7 @@ public final class AdminScreen extends Screen {
     private Layout layout;
     private String heading="SMP menu";
     private final List<Entry> entries=new ArrayList<>();
-    private record Entry(String label,Runnable action){}
+    private record Entry(String label,Runnable action,Boolean toggle){}
     public AdminScreen(){super(Component.literal("Kairu SMP"));}
     @Override public boolean isPauseScreen(){return false;}
     @Override protected void init(){build();}
@@ -62,7 +69,7 @@ public final class AdminScreen extends Screen {
             int cellW=Math.max(20,(layout.contentWidth()-8*(layout.columns()-1))/layout.columns());
             for(int n=page*capacity;n<Math.min(visible.size(),(page+1)*capacity);n++) {
                 int i=n-page*capacity;Entry entry=visible.get(n);
-                settingButton(layout.contentX()+(i%layout.columns())*(cellW+8),layout.contentY()+32+(i/layout.columns())*48,cellW,entry.label,entry.action);
+                settingButton(layout.contentX()+(i%layout.columns())*(cellW+8),layout.contentY()+32+(i/layout.columns())*48,cellW,entry.label,entry.toggle,entry.action);
             }
             int footer=layout.y()+layout.height()-36;
             button(x+12,footer,54,"Refresh",()->{
@@ -78,7 +85,8 @@ public final class AdminScreen extends Screen {
             if(page<maxPage)button(x+122,footer,42,"Next",()->{page++;build();});
         } finally {rebuilding=false;}
     }
-    private void add(String label,Runnable action){entries.add(new Entry(label,action));}
+    private void add(String label,Runnable action){entries.add(new Entry(label,action,null));}
+    private void addToggle(String label,boolean enabled,Runnable action){entries.add(new Entry(label,action,enabled));}
     private void run(String... command){KairuClient.request(command);}
     private void createGuildFromForm(){
         String value=search==null?"":search.getValue().trim();String[] parts=value.split("\\|",3);
@@ -170,9 +178,13 @@ public final class AdminScreen extends Screen {
             }
             case "world" -> {
                 heading=targetName;if(!KairuClient.can("worlds"))return;
-                for(String a:List.of("day","night","clear","rain","thunder","pvp-on","pvp-off"))add(capitalize(a),()->run(a,target));
+                for(String a:List.of("day","night","clear","rain","thunder"))add(capitalize(a),()->run(a,target));
                 add("Difficulty: Peaceful",()->run("world-difficulty",target,"peaceful"));add("Difficulty: Easy",()->run("world-difficulty",target,"easy"));add("Difficulty: Normal",()->run("world-difficulty",target,"normal"));add("Difficulty: Hard",()->run("world-difficulty",target,"hard"));
-                add("Enable mob spawning",()->run("world-rule",target,"mob-spawning","true"));add("Disable mob spawning",()->run("world-rule",target,"mob-spawning","false"));add("Enable fire spread",()->run("world-rule",target,"fire-spread","true"));add("Disable fire spread",()->run("world-rule",target,"fire-spread","false"));add("Keep inventory on",()->run("world-rule",target,"keep-inventory","true"));add("Keep inventory off",()->run("world-rule",target,"keep-inventory","false"));
+                boolean pvp=worldBoolean("pvp"),mobs=worldBoolean("mobSpawning"),fire=worldBoolean("fireSpread"),keep=worldBoolean("keepInventory");
+                addToggle("Player versus player",pvp,()->run(pvp?"pvp-off":"pvp-on",target));
+                addToggle("Mob spawning",mobs,()->run("world-rule",target,"mob-spawning",Boolean.toString(!mobs)));
+                addToggle("Fire spread",fire,()->run("world-rule",target,"fire-spread",Boolean.toString(!fire)));
+                addToggle("Keep inventory",keep,()->run("world-rule",target,"keep-inventory",Boolean.toString(!keep)));
                 add("Enable maintenance (evacuate)",()->run("world-maintenance",target,"true"));add("Disable maintenance",()->run("world-maintenance",target,"false"));
                 add("Load with Multiverse",()->run("world-load",target));add("Unload with Multiverse...",()->go("world-unload-arm"));
                 add("Back to worlds",()->go("worlds"));
@@ -235,7 +247,7 @@ public final class AdminScreen extends Screen {
     }
     private String clip(String text,int max){return font.width(text)<=max?text:font.plainSubstrByWidth(text,Math.max(1,max-12))+"...";}
     private void button(int x,int y,int w,String title,Runnable action){addRenderableWidget(new FlatButton(x,y,w,title,action));}
-    private void settingButton(int x,int y,int w,String title,Runnable action){addRenderableWidget(new SettingButton(x,y,w,title,action));}
+    private void settingButton(int x,int y,int w,String title,Boolean toggle,Runnable action){addRenderableWidget(new SettingButton(x,y,w,title,toggle,action));}
     private void navButton(int x,int y,int w,String title,boolean active,Runnable action){addRenderableWidget(new NavButton(x,y,w,title,active,action));}
     private final class FlatButton extends Button {
         FlatButton(int x,int y,int w,String title,Runnable action){super(x,y,w,24,Component.literal(title),b->{if(KairuClient.pending==null||title.equals("Close"))action.run();},DEFAULT_NARRATION);}
@@ -248,13 +260,14 @@ public final class AdminScreen extends Screen {
     }
     /** A OneConfig-inspired preference row: action title, context line, and a clear affordance. */
     private final class SettingButton extends Button {
-        SettingButton(int x,int y,int w,String title,Runnable action){super(x,y,w,40,Component.literal(title),b->{if(KairuClient.pending==null)action.run();},DEFAULT_NARRATION);}
+        private final Boolean toggle;
+        SettingButton(int x,int y,int w,String title,Boolean toggle,Runnable action){super(x,y,w,40,Component.literal(title),b->{if(KairuClient.pending==null)action.run();},DEFAULT_NARRATION);this.toggle=toggle;}
         @Override protected void extractContents(GuiGraphicsExtractor g,int mx,int my,float delta){
-            boolean hover=isHoveredOrFocused();String raw=getMessage().getString();String[] pair=settingParts(raw);boolean toggle=raw.startsWith("Allow")||raw.startsWith("Block")||raw.startsWith("Enable")||raw.startsWith("Disable");
+            boolean hover=isHoveredOrFocused();String raw=getMessage().getString();String[] pair=toggle==null?settingParts(raw):new String[]{raw,toggle?"Enabled":"Disabled"};
             round(g,getX(),getY(),getWidth(),getHeight(),hover?HOVER:CARD);g.fill(getX()+1,getY()+getHeight()-1,getX()+getWidth()-1,getY()+getHeight(),LINE);
             g.text(font,clip(pair[0],getWidth()-64),getX()+10,getY()+8,KairuClient.pending!=null?MUTED:WHITE,false);
             if(!pair[1].isBlank())g.text(font,clip(pair[1],getWidth()-64),getX()+10,getY()+23,MUTED,false);
-            if(toggle){boolean on=raw.startsWith("Allow")||raw.startsWith("Enable");int color=on?GOOD:0xFF686B7B;round(g,getX()+getWidth()-36,getY()+12,26,14,color);round(g,getX()+getWidth()-(on?22:34),getY()+14,10,10,WHITE);}
+            if(toggle!=null){boolean on=toggle;int color=on?GOOD:0xFF686B7B;round(g,getX()+getWidth()-36,getY()+12,26,14,color);round(g,getX()+getWidth()-(on?22:34),getY()+14,10,10,WHITE);}
             else {g.text(font,hover?"›":"›",getX()+getWidth()-16,getY()+14,hover?CYAN:MUTED,false);}
         }
     }
@@ -276,6 +289,7 @@ public final class AdminScreen extends Screen {
     private static String capitalize(String s){return s.isEmpty()?s:s.substring(0,1).toUpperCase(Locale.ROOT)+s.substring(1);}
     private static String navName(String route){return switch(route){case "travel"->"World travel";case "guilds"->"Guilds";case "points"->"Points";case "plots"->"Atrium plots";case "overview"->"Overview";case "players"->"Players";case "worlds"->"World controls";default->capitalize(route);};}
     private static String[] settingParts(String value){int split=value.indexOf(" · ");if(split>0)return new String[]{value.substring(0,split),value.substring(split+3)};if(value.startsWith("Plot "))return new String[]{value.substring(5),"PlotSquared action"};if(value.startsWith("Grant ")||value.startsWith("Remove "))return new String[]{value,"LuckPerms role assignment"};return new String[]{value,"Click to open or apply"};}
+    private boolean worldBoolean(String key){if(KairuClient.state==null||!KairuClient.state.has("worlds"))return false;for(JsonElement value:KairuClient.state.getAsJsonArray("worlds")){JsonObject world=value.getAsJsonObject();if(target.equals(world.get("id").getAsString()))return world.has(key)&&world.get(key).getAsBoolean();}return false;}
     private static String playerName(String id){if(KairuClient.state!=null&&KairuClient.state.has("players"))for(JsonElement value:KairuClient.state.getAsJsonArray("players")){JsonObject player=value.getAsJsonObject();if(player.get("id").getAsString().equals(id))return player.get("name").getAsString();}return id.length()>8?id.substring(0,8)+"…":id;}
     private static String slotName(int i){return i<9?"Hotbar "+(i+1):i<36?"Storage "+(i-8):switch(i){case 36->"Boots";case 37->"Leggings";case 38->"Chestplate";case 39->"Helmet";default->"Offhand";};}
 }

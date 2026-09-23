@@ -240,6 +240,12 @@ export const SERVER_BLUEPRINT: ServerBlueprint = {
     { key: "premium", resourceKey: "category.premium", name: "💎 PREMIUM" },
     { key: "support", resourceKey: "category.support", name: "🎫 SUPPORT" },
     { key: "staff", resourceKey: "category.staff", name: "🛡️ STAFF" },
+    { key: "ashfall", resourceKey: "category.ashfall", name: "🔥 ASHFALL" },
+    { key: "obsidian-gate", resourceKey: "category.obsidian-gate", name: "💀 OBSIDIAN GATE" },
+    { key: "atrium", resourceKey: "category.atrium", name: "🏛️ THE ATRIUM" },
+    { key: "colosseum", resourceKey: "category.colosseum", name: "⚔️ NEON COLOSSEUM" },
+    { key: "quarry", resourceKey: "category.quarry", name: "⛏️ THE QUARRY" },
+    { key: "verdance", resourceKey: "category.verdance", name: "🌿 VERDANCE" },
   ],
   channels: [
     text(
@@ -345,6 +351,44 @@ export const SERVER_BLUEPRINT: ServerBlueprint = {
       "Creator collaboration lounge.",
     ),
     text("afk", "community", "public", "Away-from-keyboard notices."),
+    // Spawn Hub intentionally has no Discord category. Network-wide discussion
+    // stays in these global Minecraft channels instead.
+    text("global-chat", "minecraft", "public", "Network-wide Minecraft and Discord chat."),
+    text("account-links", "minecraft", "read-only", "Link one or more Minecraft accounts to Discord."),
+    text("achievements", "minecraft", "read-only", "Kairu SMP achievements."),
+    text("deaths", "minecraft", "read-only", "Optional global Minecraft death feed."),
+    text("events-global", "minecraft", "read-only", "Network-wide Minecraft events."),
+    text("server-news", "minecraft", "read-only", "Kairu SMP server news."),
+    // Registry-driven Discord categories for the six non-Hub worlds.
+    text("ashfall-chat", "ashfall", "public", "Ashfall world chat."),
+    text("ashfall-news", "ashfall", "read-only", "Ashfall announcements."),
+    text("ashfall-guilds", "ashfall", "public", "Ashfall guild discussion."),
+    text("ashfall-deaths", "ashfall", "read-only", "Ashfall deaths."),
+    text("ashfall-leaderboard", "ashfall", "read-only", "Ashfall leaderboard."),
+    text("ashfall-showcase", "ashfall", "public", "Ashfall player showcase."),
+    text("obsidian-chat", "obsidian-gate", "public", "Obsidian Gate world chat."),
+    text("obsidian-deaths", "obsidian-gate", "read-only", "Hardcore death notices."),
+    text("obsidian-leaderboard", "obsidian-gate", "read-only", "Obsidian Gate leaderboard."),
+    text("obsidian-news", "obsidian-gate", "read-only", "Obsidian Gate announcements."),
+    text("reset-window", "obsidian-gate", "read-only", "Hardcore reset schedule and eligibility."),
+    text("atrium-chat", "atrium", "public", "The Atrium world chat."),
+    text("build-showcase", "atrium", "public", "Completed Atrium builds."),
+    text("featured-builds", "atrium", "read-only", "Featured Atrium builds."),
+    text("build-competitions", "atrium", "public", "Atrium build competitions."),
+    text("atrium-news", "atrium", "read-only", "Atrium announcements."),
+    text("colosseum-chat", "colosseum", "public", "Neon Colosseum world chat."),
+    text("event-registration", "colosseum", "public", "Colosseum event registration."),
+    text("match-results", "colosseum", "read-only", "Colosseum match results."),
+    text("tournaments", "colosseum", "public", "Tournament discussion."),
+    text("colosseum-leaderboard", "colosseum", "read-only", "Colosseum leaderboard."),
+    text("colosseum-news", "colosseum", "read-only", "Colosseum announcements."),
+    text("quarry-chat", "quarry", "public", "The Quarry world chat."),
+    text("quarry-reset", "quarry", "read-only", "Quarry reset timing and notices."),
+    text("quarry-news", "quarry", "read-only", "Quarry announcements."),
+    text("verdance-discussion", "verdance", "public", "Verdance archive discussion; Minecraft bridge is off by default."),
+    text("season-history", "verdance", "read-only", "Verdance season history."),
+    text("verdance-memories", "verdance", "public", "Verdance memories and screenshots."),
+    text("archived-leaderboard", "verdance", "read-only", "Archived Verdance leaderboard."),
     voice("lounge", "Lounge", "community", "public"),
     voice("gaming", "Gaming", "community", "public"),
     voice("survival", "Survival", "minecraft", "public"),
@@ -396,13 +440,13 @@ export function assertBlueprintIntegrity(
     throw new Error(
       `SERVER_BLUEPRINT must define exactly 15 roles; found ${blueprint.roles.length}`,
     );
-  if (blueprint.categories.length !== 9)
+  if (blueprint.categories.length !== 15)
     throw new Error(
-      `SERVER_BLUEPRINT must define exactly 9 categories; found ${blueprint.categories.length}`,
+      `SERVER_BLUEPRINT must define exactly 15 categories; found ${blueprint.categories.length}`,
     );
-  if (blueprint.channels.length !== 34)
+  if (blueprint.channels.length !== 69)
     throw new Error(
-      `SERVER_BLUEPRINT must define exactly 34 channels; found ${blueprint.channels.length}`,
+      `SERVER_BLUEPRINT must define exactly 69 channels; found ${blueprint.channels.length}`,
     );
   const textChannels = blueprint.channels.filter(
     (channel) => channel.type === "text-channel",
@@ -410,9 +454,9 @@ export function assertBlueprintIntegrity(
   const voiceChannels = blueprint.channels.filter(
     (channel) => channel.type === "voice-channel",
   ).length;
-  if (textChannels !== 28 || voiceChannels !== 6)
+  if (textChannels !== 63 || voiceChannels !== 6)
     throw new Error(
-      `SERVER_BLUEPRINT must define 28 text and 6 voice channels; found ${textChannels} text and ${voiceChannels} voice`,
+      `SERVER_BLUEPRINT must define 63 text and 6 voice channels; found ${textChannels} text and ${voiceChannels} voice`,
     );
   const categoryKeys = new Set(
     blueprint.categories.map((category) => category.key),

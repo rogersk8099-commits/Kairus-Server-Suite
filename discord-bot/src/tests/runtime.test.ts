@@ -20,14 +20,14 @@ const baseEnvironment = {
 
 describe("consolidated runtime invariants", () => {
   it("locks the exact requested setup counts and preserves every listed channel name", () => {
-    expect(SERVER_BLUEPRINT.categories).toHaveLength(9);
+    expect(SERVER_BLUEPRINT.categories).toHaveLength(15);
     expect(SERVER_BLUEPRINT.roles).toHaveLength(15);
-    expect(SERVER_BLUEPRINT.channels).toHaveLength(34);
+    expect(SERVER_BLUEPRINT.channels).toHaveLength(69);
     expect(
       SERVER_BLUEPRINT.channels.filter(
         (channel) => channel.type === "text-channel",
       ),
-    ).toHaveLength(28);
+    ).toHaveLength(63);
     expect(
       SERVER_BLUEPRINT.channels.filter(
         (channel) => channel.type === "voice-channel",
@@ -68,6 +68,13 @@ describe("consolidated runtime invariants", () => {
       "Building",
       "Premium Lounge",
       "Staff Meeting",
+      "global-chat", "account-links", "achievements", "deaths", "events-global", "server-news",
+      "ashfall-chat", "ashfall-news", "ashfall-guilds", "ashfall-deaths", "ashfall-leaderboard", "ashfall-showcase",
+      "obsidian-chat", "obsidian-deaths", "obsidian-leaderboard", "obsidian-news", "reset-window",
+      "atrium-chat", "build-showcase", "featured-builds", "build-competitions", "atrium-news",
+      "colosseum-chat", "event-registration", "match-results", "tournaments", "colosseum-leaderboard", "colosseum-news",
+      "quarry-chat", "quarry-reset", "quarry-news",
+      "verdance-discussion", "season-history", "verdance-memories", "archived-leaderboard",
     ]);
   });
 

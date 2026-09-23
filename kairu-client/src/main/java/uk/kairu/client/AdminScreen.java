@@ -12,7 +12,7 @@ import java.util.*;
 
 /** Independent native screen: no OneConfig, Compose, Kotlin, browser or shader dependencies. */
 public final class AdminScreen extends Screen {
-    private static final int BG=0xFF101216,SIDEBAR=0xFF0C0E12,CARD=0xFF191D25,HOVER=0xFF242A36,ACCENT=0xFFAF83FF,CYAN=0xFF53DBFA,WHITE=0xFFF3F5FA,MUTED=0xFF98A2B8,LINE=0xFF2B313D;
+    private static final int BG=0xFF12131A,SIDEBAR=0xFF0D0E14,CARD=0xFF1B1C27,HOVER=0xFF26283A,ACCENT=0xFFA97CFF,CYAN=0xFF5BDBFF,WHITE=0xFFF5F2FF,MUTED=0xFFAAA7B9,LINE=0xFF303244,GOOD=0xFF61D3A5;
     private String route="overview",target="",targetName="",query="",selectedFlag="",selectedFlagType="";
     private boolean selectedFlagBoolean;
     private int page,seenRevision,slot;
@@ -44,9 +44,9 @@ public final class AdminScreen extends Screen {
             var adminTabs=new ArrayList<String>(); if(KairuClient.admin())adminTabs.addAll(List.of("overview","players","worlds"));
             administrationHeaderY=-1;
             if(layout.sidebar()) {
-                int navY=y+58;
-                for(String tab:playerTabs){String selected=tab;navButton(x+12,navY,122,capitalize(tab),tab.equals(route),()->go(selected));navY+=30;}
-                if(!adminTabs.isEmpty()){administrationHeaderY=navY+5;navY+=20;for(String tab:adminTabs){String selected=tab;navButton(x+12,navY,122,capitalize(tab),tab.equals(route),()->go(selected));navY+=30;}}
+                int navY=y+76;
+                for(String tab:playerTabs){String selected=tab;navButton(x+12,navY,162,navName(tab),tab.equals(route),()->go(selected));navY+=32;}
+                if(!adminTabs.isEmpty()){administrationHeaderY=navY+7;navY+=24;for(String tab:adminTabs){String selected=tab;navButton(x+12,navY,162,navName(tab),tab.equals(route),()->go(selected));navY+=32;}}
             } else {
                 var tabs=new ArrayList<String>();tabs.addAll(playerTabs);tabs.addAll(adminTabs);int tabW=Math.max(28,(w-24)/tabs.size());
                 for(int i=0;i<tabs.size();i++){String tab=tabs.get(i);navButton(x+12+i*tabW,y+47,tabW-4,capitalize(tab),tab.equals(route),()->go(tab));}
@@ -62,7 +62,7 @@ public final class AdminScreen extends Screen {
             int cellW=Math.max(20,(layout.contentWidth()-8*(layout.columns()-1))/layout.columns());
             for(int n=page*capacity;n<Math.min(visible.size(),(page+1)*capacity);n++) {
                 int i=n-page*capacity;Entry entry=visible.get(n);
-                button(layout.contentX()+(i%layout.columns())*(cellW+8),layout.contentY()+28+(i/layout.columns())*32,cellW,entry.label,entry.action);
+                settingButton(layout.contentX()+(i%layout.columns())*(cellW+8),layout.contentY()+32+(i/layout.columns())*48,cellW,entry.label,entry.action);
             }
             int footer=layout.y()+layout.height()-36;
             button(x+12,footer,54,"Refresh",()->{
@@ -217,23 +217,25 @@ public final class AdminScreen extends Screen {
     @Override public void extractBackground(GuiGraphicsExtractor g,int mx,int my,float delta) { /* Custom opaque surface below. */ }
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float delta){
         if(layout==null)return;
-        g.fill(0,0,width,height,0xC4000000);round(g,layout.x(),layout.y(),layout.width(),layout.height(),BG);
-        if(layout.sidebar())g.fill(layout.x(),layout.y(),layout.x()+154,layout.bottom(),SIDEBAR);
-        g.fill(layout.x()+12,layout.y()+42,layout.x()+layout.width()-12,layout.y()+43,LINE);
+        g.fill(0,0,width,height,0xCA070811);round(g,layout.x(),layout.y(),layout.width(),layout.height(),BG);
+        if(layout.sidebar())g.fill(layout.x(),layout.y(),layout.x()+184,layout.bottom(),SIDEBAR);
+        g.fill(layout.x()+12,layout.y()+56,layout.x()+layout.width()-12,layout.y()+57,LINE);
         g.text(font,"KAIRU SMP",layout.x()+14,layout.y()+13,CYAN,false);
-        if(layout.sidebar())g.text(font,"SERVER CONTROL PANEL",layout.x()+14,layout.y()+27,MUTED,false);
+        if(layout.sidebar())g.text(font,"PLAYER SETTINGS",layout.x()+14,layout.y()+31,MUTED,false);
         if(layout.sidebar()&&administrationHeaderY>=0)g.text(font,"ADMINISTRATION",layout.x()+14,administrationHeaderY,MUTED,false);
         int titleX=layout.sidebar()?layout.contentX():layout.x()+14;
         int titleY=layout.sidebar()?layout.y()+16:layout.y()+27;
         g.text(font,clip(heading,Math.max(20,layout.width()-88)),titleX,titleY,WHITE,false);
-        if(layout.sidebar())g.text(font,"Settings",titleX,layout.y()+30,MUTED,false);
-        if(layout.sidebar())g.fill(layout.x()+153,layout.y()+48,layout.x()+154,layout.bottom(),LINE);
-        g.fill(layout.contentX(),layout.contentY()+24,layout.contentX()+layout.contentWidth(),layout.contentY()+25,LINE);
+        if(layout.sidebar())g.text(font,KairuClient.admin()?"Server-authoritative controls":"Server-authoritative player menu",titleX,layout.y()+34,MUTED,false);
+        if(layout.sidebar())g.fill(layout.x()+183,layout.y()+58,layout.x()+184,layout.bottom(),LINE);
+        round(g,layout.contentX(),layout.contentY(),layout.contentWidth(),22,0xFF161722);
+        g.fill(layout.contentX()+8,layout.contentY()+21,layout.contentX()+layout.contentWidth()-8,layout.contentY()+22,LINE);
         super.extractRenderState(g,mx,my,delta);
         g.text(font,clip(KairuClient.message,layout.width()-24),layout.x()+12,layout.y()+layout.height()-11,MUTED,false);
     }
     private String clip(String text,int max){return font.width(text)<=max?text:font.plainSubstrByWidth(text,Math.max(1,max-12))+"...";}
     private void button(int x,int y,int w,String title,Runnable action){addRenderableWidget(new FlatButton(x,y,w,title,action));}
+    private void settingButton(int x,int y,int w,String title,Runnable action){addRenderableWidget(new SettingButton(x,y,w,title,action));}
     private void navButton(int x,int y,int w,String title,boolean active,Runnable action){addRenderableWidget(new NavButton(x,y,w,title,active,action));}
     private final class FlatButton extends Button {
         FlatButton(int x,int y,int w,String title,Runnable action){super(x,y,w,24,Component.literal(title),b->{if(KairuClient.pending==null||title.equals("Close"))action.run();},DEFAULT_NARRATION);}
@@ -244,10 +246,22 @@ public final class AdminScreen extends Screen {
             g.text(font,clip(getMessage().getString(),getWidth()-14),getX()+7,getY()+8,KairuClient.pending!=null?MUTED:WHITE,false);
         }
     }
+    /** A OneConfig-inspired preference row: action title, context line, and a clear affordance. */
+    private final class SettingButton extends Button {
+        SettingButton(int x,int y,int w,String title,Runnable action){super(x,y,w,40,Component.literal(title),b->{if(KairuClient.pending==null)action.run();},DEFAULT_NARRATION);}
+        @Override protected void extractContents(GuiGraphicsExtractor g,int mx,int my,float delta){
+            boolean hover=isHoveredOrFocused();String raw=getMessage().getString();String[] pair=settingParts(raw);boolean toggle=raw.startsWith("Allow")||raw.startsWith("Block")||raw.startsWith("Enable")||raw.startsWith("Disable");
+            round(g,getX(),getY(),getWidth(),getHeight(),hover?HOVER:CARD);g.fill(getX()+1,getY()+getHeight()-1,getX()+getWidth()-1,getY()+getHeight(),LINE);
+            g.text(font,clip(pair[0],getWidth()-64),getX()+10,getY()+8,KairuClient.pending!=null?MUTED:WHITE,false);
+            if(!pair[1].isBlank())g.text(font,clip(pair[1],getWidth()-64),getX()+10,getY()+23,MUTED,false);
+            if(toggle){boolean on=raw.startsWith("Allow")||raw.startsWith("Enable");int color=on?GOOD:0xFF686B7B;round(g,getX()+getWidth()-36,getY()+12,26,14,color);round(g,getX()+getWidth()-(on?22:34),getY()+14,10,10,WHITE);}
+            else {g.text(font,hover?"›":"›",getX()+getWidth()-16,getY()+14,hover?CYAN:MUTED,false);}
+        }
+    }
     private final class NavButton extends Button {
         private final boolean active;
-        NavButton(int x,int y,int w,String title,boolean active,Runnable action){super(x,y,w,24,Component.literal(title),b->{if(KairuClient.pending==null)action.run();},DEFAULT_NARRATION);this.active=active;}
-        @Override protected void extractContents(GuiGraphicsExtractor g,int mx,int my,float delta){boolean hover=isHoveredOrFocused();int fill=active?0xFF252436:(hover?0xFF171B23:SIDEBAR);round(g,getX(),getY(),getWidth(),getHeight(),fill);if(active)g.fill(getX(),getY()+3,getX()+3,getY()+getHeight()-3,ACCENT);else if(hover)g.fill(getX(),getY()+5,getX()+2,getY()+getHeight()-5,CYAN);g.text(font,clip(getMessage().getString(),getWidth()-12),getX()+8,getY()+8,active?WHITE:MUTED,false);}
+        NavButton(int x,int y,int w,String title,boolean active,Runnable action){super(x,y,w,26,Component.literal(title),b->{if(KairuClient.pending==null)action.run();},DEFAULT_NARRATION);this.active=active;}
+        @Override protected void extractContents(GuiGraphicsExtractor g,int mx,int my,float delta){boolean hover=isHoveredOrFocused();int fill=active?0xFF28243B:(hover?0xFF191B27:SIDEBAR);round(g,getX(),getY(),getWidth(),getHeight(),fill);if(active)g.fill(getX(),getY()+4,getX()+3,getY()+getHeight()-4,ACCENT);else if(hover)g.fill(getX(),getY()+5,getX()+2,getY()+getHeight()-5,CYAN);g.text(font,clip(getMessage().getString(),getWidth()-18),getX()+10,getY()+9,active?WHITE:MUTED,false);}
     }
     private static void round(GuiGraphicsExtractor g,int x,int y,int w,int h,int color){
         g.fill(x+3,y,x+w-3,y+h,color);g.fill(x,y+3,x+w,y+h-3,color);g.fill(x+1,y+1,x+w-1,y+h-1,color);
@@ -260,6 +274,8 @@ public final class AdminScreen extends Screen {
     }
     @Override public void onClose(){KairuClient.opening=false;Minecraft.getInstance().gui.setScreen(null);}
     private static String capitalize(String s){return s.isEmpty()?s:s.substring(0,1).toUpperCase(Locale.ROOT)+s.substring(1);}
+    private static String navName(String route){return switch(route){case "travel"->"World travel";case "guilds"->"Guilds";case "points"->"Points";case "plots"->"Atrium plots";case "overview"->"Overview";case "players"->"Players";case "worlds"->"World controls";default->capitalize(route);};}
+    private static String[] settingParts(String value){int split=value.indexOf(" · ");if(split>0)return new String[]{value.substring(0,split),value.substring(split+3)};if(value.startsWith("Plot "))return new String[]{value.substring(5),"PlotSquared action"};if(value.startsWith("Grant ")||value.startsWith("Remove "))return new String[]{value,"LuckPerms role assignment"};return new String[]{value,"Click to open or apply"};}
     private static String playerName(String id){if(KairuClient.state!=null&&KairuClient.state.has("players"))for(JsonElement value:KairuClient.state.getAsJsonArray("players")){JsonObject player=value.getAsJsonObject();if(player.get("id").getAsString().equals(id))return player.get("name").getAsString();}return id.length()>8?id.substring(0,8)+"…":id;}
     private static String slotName(int i){return i<9?"Hotbar "+(i+1):i<36?"Storage "+(i-8):switch(i){case 36->"Boots";case 37->"Leggings";case 38->"Chestplate";case 39->"Helmet";default->"Offhand";};}
 }

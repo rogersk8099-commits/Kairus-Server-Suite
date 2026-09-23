@@ -441,7 +441,7 @@ public final class SMPPlatform extends JavaPlugin {
             sender.sendMessage("§7Spawn Hub policy, registered permissions and integration checks will be applied on §fapply§7.");
             return true;
         }
-        World hub = Bukkit.getWorld("spawn-hub");
+        World hub = Bukkit.getWorld(registry.require("spawn-hub").minecraftWorldName());
         if (hub != null) applySpawnHubPolicy(hub);
         sender.sendMessage("§aSetup applied. Spawn Hub policy is active; existing worlds were preserved.");
         sender.sendMessage("§7Atrium is created only as a superflat PlotSquared world. An existing Atrium is never converted or replaced.");
@@ -450,6 +450,16 @@ public final class SMPPlatform extends JavaPlugin {
 
     private void createSetupWorld(WorldDefinition definition, CommandSender sender) {
         try {
+            if (definition.id().equals("spawn-hub")) {
+                // Bukkit always has a primary level. It is the Kairu Spawn Hub;
+                // never make a second hub world just because its folder is named world.
+                World primary = Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().getFirst();
+                if (primary != null) {
+                    applySpawnHubPolicy(primary);
+                    sender.sendMessage("§a   Adopted the server default world as Spawn Hub (" + primary.getName() + ").");
+                    return;
+                }
+            }
             if (definition.id().equals("atrium")) {
                 if (!definition.minecraftWorldName().equalsIgnoreCase("atrium") && Bukkit.getWorld("atrium") != null) {
                     sender.sendMessage("§e   An existing Atrium world is loaded. It was not replaced and no duplicate world was created.");

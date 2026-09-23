@@ -119,7 +119,7 @@ const centralWorldRegistry = {
 
 function registryWorld(id: string, displayName: string, type: string, season: string, status: string, difficulty: string, borderSize: number, pvpMode: string, guildsEnabled: boolean, pointsEnabled: boolean, currencyId: string, inventoryGroup: string, reset: "none" | "manual" | "weekly", archive: boolean) {
   return {
-    id, minecraftWorldName: id, displayName, description: `${displayName} world.`, type, season, status, difficulty, borderSize, pvpMode,
+    id, minecraftWorldName: id === "spawn-hub" ? "world" : id, displayName, description: `${displayName} world.`, type, season, status, difficulty, borderSize, pvpMode,
     guildsEnabled, pointsEnabled, currencyId, claimsEnabled: false, economyEnabled: false, inventoryGroup,
     resetPolicy: reset === "weekly" ? { kind: "weekly", day: "MONDAY", time: "04:00", timezone: "UTC", safetyBackupRequired: true } : reset === "manual" ? { kind: "manual", reason: "Managed by Kairu SMP administration" } : { kind: "none" },
     archivePolicy: { tourMode: archive, blockBreakDenied: archive, blockPlaceDenied: archive, containerMutationDenied: archive, terrainDamageDenied: archive },

@@ -9,7 +9,9 @@ registry:
 worlds:
   spawn-hub:
     id: spawn-hub
-    minecraft-world-name: spawn-hub
+    # The server's primary Minecraft world is the Spawn Hub.  The visible
+    # Kairu world ID remains spawn-hub; the physical default folder is world.
+    minecraft-world-name: world
     display-name: "Spawn Hub"
     public-type: "Hub"
     module-type: HUB

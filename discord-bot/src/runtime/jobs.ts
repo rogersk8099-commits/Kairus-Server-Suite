@@ -62,7 +62,11 @@ export class RuntimeJobs {
       const channel = await this.client.channels.fetch(configuredId).catch(() => null);
       return channel?.type === ChannelType.GuildText ? channel : null;
     }
-    return this.textResource(guildId, fallbackResource);
+    const defaultResource = purpose === "GLOBAL_CHAT" ? "text-channel.global-chat"
+      : purpose === "SERVER_STATUS" ? "text-channel.server-status"
+      : purpose.startsWith("WORLD_CHAT:") ? worldChatResource(purpose.slice("WORLD_CHAT:".length))
+      : fallbackResource;
+    return this.textResource(guildId, defaultResource);
   }
 
   private async youtubeStreams(guildId: string): Promise<void> {
@@ -167,4 +171,8 @@ export class RuntimeJobs {
       if (event.receivedAt > this.bridgeCursor) this.bridgeCursor = event.receivedAt;
     }
   }
+}
+
+function worldChatResource(worldId: string): string {
+  return ({ ashfall: "text-channel.ashfall-chat", "obsidian-gate": "text-channel.obsidian-chat", atrium: "text-channel.atrium-chat", colosseum: "text-channel.colosseum-chat", quarry: "text-channel.quarry-chat" } as Record<string, string>)[worldId] ?? "text-channel.game-chat";
 }

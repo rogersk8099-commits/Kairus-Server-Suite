@@ -10,7 +10,7 @@
       "uk.kairu.client.KairuClient"
     ]
   },
-  "license": "MIT",
+  "license": "MIT"${oneConfigJarBlock},
   "depends": {
     "fabricloader": ">=0.19.3",
     "minecraft": "26.2.x",

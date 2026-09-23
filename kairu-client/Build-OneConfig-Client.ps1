@@ -9,15 +9,21 @@ if (-not (Test-Path (Join-Path $oneConfig 'gradlew.bat'))) {
     throw "Missing bundled OneConfig source at $oneConfig"
 }
 
-Push-Location $oneConfig
-try {
-    & .\gradlew.bat ':bootstrap:26.2-fabric:build' --no-daemon
-    if ($LASTEXITCODE -ne 0) { throw "OneConfig build failed with exit code $LASTEXITCODE" }
-} finally { Pop-Location }
-
-$bootstrap = Get-ChildItem (Join-Path $oneConfig 'bootstrap\versions\26.2-fabric\build\libs') -Filter '*.jar' |
+$bootstrapDirectory = Join-Path $oneConfig 'bootstrap\versions\26.2-fabric\build\libs'
+$bootstrap = Get-ChildItem $bootstrapDirectory -Filter '*.jar' -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -notmatch 'sources|dev' } |
     Select-Object -First 1
+
+if ($null -eq $bootstrap) {
+    Push-Location $oneConfig
+    try {
+        & .\gradlew.bat ':bootstrap:26.2-fabric:build' --no-daemon
+        if ($LASTEXITCODE -ne 0) { throw "OneConfig build failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $bootstrap = Get-ChildItem $bootstrapDirectory -Filter '*.jar' |
+        Where-Object { $_.Name -notmatch 'sources|dev' } |
+        Select-Object -First 1
+}
 if ($null -eq $bootstrap) { throw 'OneConfig did not produce its Fabric 26.2 bootstrap JAR.' }
 
 Push-Location $root

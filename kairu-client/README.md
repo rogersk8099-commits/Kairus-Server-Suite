@@ -13,6 +13,11 @@ notice are retained in `oneconfig-source/LICENSE` and `ONECONFIG-NOTICE.md`.
 
 The client is an interface only. It does not contain database credentials, Discord tokens, permission decisions, or gameplay logic. SMPPlatform remains authoritative and Bedrock players use server-side menus/forms.
 
+Pressing **K** now first receives the server-authorised state and opens the real OneConfig
+Kairu landing page. Its Player and Administration categories lead into the relevant Kairu
+actions. The remaining detail pages are retained as a compatibility surface while they are
+ported one by one; each continues to use the same server-checked request protocol.
+
 ## Current integration status
 
 This UI uses the `KAIRU_ADMIN_V2` request/reply protocol, now handled by SMPPlatform's permission-checked `kairuadmin` gateway. It provides server state, permitted world travel, player/world administration actions, readable Atrium settings labels, the caller's guild profile and PostgreSQL-backed points balances. Do not ship the client as a replacement for SMPPlatform.

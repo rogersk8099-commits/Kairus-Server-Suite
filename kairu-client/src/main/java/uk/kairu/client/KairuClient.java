@@ -69,7 +69,7 @@ public final class KairuClient implements ClientModInitializer {
                 if(!can("inventory"))inventory=null;
                 else if(response.has("inventory"))inventory=response.getAsJsonObject("inventory");
                 revision++;
-                if(opening) {opening=false;MC.gui.setScreen(new AdminScreen());}
+                if(opening) {opening=false;KairuOneConfig.open();}
             } catch(RuntimeException ignored) { /* A malformed response cannot grant access; timeout closes the menu. */ }
             return false;
         });
@@ -81,6 +81,10 @@ public final class KairuClient implements ClientModInitializer {
         state=null;inventory=null;opening=true;notice("Checking SMP access...");request("status");
     }
     static void reset(){state=null;inventory=null;pending=null;opening=false;lastReply=0;revision++;}
+    static void openNativePage(String route){
+        if(!connected()||state==null)return;
+        MC.execute(()->MC.gui.setScreen(new AdminScreen(route)));
+    }
     static void notice(String s){message=s;if(MC.player!=null)MC.gui.hud.setOverlayMessage(Component.literal(s),true);}
     static boolean admin(){return state!=null&&state.get("admin").getAsBoolean();}
     static boolean can(String p){return admin()&&java.util.stream.StreamSupport.stream(state.getAsJsonArray("permissions").spliterator(),false).anyMatch(v->v.getAsString().equals(p));}

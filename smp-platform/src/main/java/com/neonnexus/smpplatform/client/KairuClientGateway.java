@@ -113,6 +113,8 @@ public final class KairuClientGateway {
         return switch (action) {
             case "status" -> "SMPPlatform connected.";
             case "auction-browse" -> playerCommand(actor, "auction browse");
+            case "auction-sell" -> playerCommand(actor, "auction sell " + require(args, 2, "Enter a starting price.") + " " + require(args, 3, "Enter a duration."));
+            case "auction-bid" -> playerCommand(actor, "auction bid " + require(args, 2, "Select an auction.") + " " + require(args, 3, "Enter a bid amount."));
             case "search" -> playerCommand(actor, "search " + require(args, 2, "Enter a player name."));
             case "setup" -> isAdmin(actor) ? "Server setup is ready. Run /kairuadmin setup preview, then /kairuadmin setup apply." : "Server setup requires administrator access.";
             case "travel" -> travel(actor, require(args, 2, "Choose a world."));

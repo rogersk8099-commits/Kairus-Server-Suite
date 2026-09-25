@@ -34,6 +34,7 @@ public final class AuctionService {
             case "sell", "list" -> list(player, args);
             case "bid" -> bid(player, args);
             case "cancel" -> cancel(player, args);
+            case "remove" -> remove(player, args);
             default -> help(player);
         }
     }
@@ -43,6 +44,7 @@ public final class AuctionService {
         if (p.hasPermission("smpplatform.auction.create")) p.sendMessage("§d/auction sell <starting-price> [minutes]");
         if (p.hasPermission("smpplatform.auction.bid")) p.sendMessage("§d/auction bid <listing-id> <amount>");
         if (p.hasPermission("smpplatform.auction.create")) p.sendMessage("§d/auction cancel <listing-id>");
+        if (p.hasPermission("smpplatform.auction.remove")) p.sendMessage("§d/auction remove <listing-id>");
     }
 
     private void list(Player p, String[] args) {
@@ -248,20 +250,108 @@ public final class AuctionService {
             ItemStack item=null; String message;
             try(Connection c=dataSource.getConnection()){
                 c.setAutoCommit(false);
-                try(PreparedStatement ps=c.prepareStatement("SELECT seller_id,item_data,status FROM smp_auction_listings WHERE id=? FOR UPDATE")){
+                UUID bidder=null; long bid=0; Instant now=Instant.now(); UUID correlation=UUID.randomUUID();
+                try(PreparedStatement ps=c.prepareStatement("SELECT seller_id,item_data,status,highest_bidder,current_bid FROM smp_auction_listings WHERE id=? FOR UPDATE")){
                     ps.setObject(1,id); try(ResultSet r=ps.executeQuery()){
                         if(!r.next()) throw new IllegalArgumentException("Listing not found.");
                         if(!p.getUniqueId().equals(r.getObject(1))) throw new IllegalArgumentException("You do not own this listing.");
                         if(!"OPEN".equals(r.getString(3))) throw new IllegalArgumentException("Listing is no longer open.");
-                        item=ItemStack.deserializeBytes(r.getBytes(2));
+                        item=ItemStack.deserializeBytes(r.getBytes(2)); bidder=(UUID)r.getObject(4); bid=r.getLong(5);
                     }
                 }
+                if(bidder!=null && bid>0) mutatePoints(c,bidder,bid,"REFUND","Cancelled auction "+id,
+                        "{\"auction_id\":\""+id+"\",\"type\":\"CANCEL_REFUND\"}",null,correlation,now);
                 try(PreparedStatement ps=c.prepareStatement("UPDATE smp_auction_listings SET status='CANCELLED',version=version+1 WHERE id=?")){ps.setObject(1,id);ps.executeUpdate();}
-                c.commit(); message="§aAuction cancelled.";
+                c.commit(); message="§aAuction cancelled. Any active bid has been refunded.";
             }catch(Exception e){message="§cCancel failed: "+e.getMessage();}
             ItemStack refund=item; Bukkit.getScheduler().runTask(plugin,()->{p.sendMessage(message);if(refund!=null){Map<Integer,ItemStack> left=p.getInventory().addItem(refund);if(!left.isEmpty())p.getWorld().dropItemNaturally(p.getLocation(),left.values().iterator().next());}});
         });
     }
+
+    private void remove(Player p, String[] args) {
+        if (!p.hasPermission("smpplatform.auction.remove")) { p.sendMessage("§cYou do not have permission to remove auctions."); return; }
+        if(args.length<2){p.sendMessage("§cUsage: /auction remove <listing-id>");return;}
+        UUID id; try{id=UUID.fromString(args[1]);}catch(Exception e){p.sendMessage("§cInvalid listing ID.");return;}
+        io.execute(()->{
+            ItemStack item=null; UUID seller=null; String message;
+            try(Connection c=dataSource.getConnection()){
+                c.setAutoCommit(false);
+                UUID bidder=null; long bid=0; Instant now=Instant.now(); UUID correlation=UUID.randomUUID();
+                try(PreparedStatement ps=c.prepareStatement("SELECT seller_id,item_data,status,highest_bidder,current_bid FROM smp_auction_listings WHERE id=? FOR UPDATE")){
+                    ps.setObject(1,id); try(ResultSet r=ps.executeQuery()){
+                        if(!r.next()) throw new IllegalArgumentException("Listing not found.");
+                        if(!"OPEN".equals(r.getString(3))) throw new IllegalArgumentException("Listing is no longer open.");
+                        seller=(UUID)r.getObject(1); item=ItemStack.deserializeBytes(r.getBytes(2)); bidder=(UUID)r.getObject(4); bid=r.getLong(5);
+                    }
+                }
+                Player sellerOnline=Bukkit.getPlayer(seller);
+                if(sellerOnline==null) throw new IllegalArgumentException("Seller must be online so the auction item can be returned safely.");
+                if(bidder!=null && bid>0) mutatePoints(c,bidder,bid,"REFUND","Administrator removed auction "+id,
+                        "{\"auction_id\":\""+id+"\",\"type\":\"ADMIN_REMOVE_REFUND\"}",p.getUniqueId(),correlation,now);
+                try(PreparedStatement ps=c.prepareStatement("UPDATE smp_auction_listings SET status='REMOVED',version=version+1 WHERE id=?")){ps.setObject(1,id);ps.executeUpdate();}
+                c.commit(); message="§aAuction removed and any active bid refunded.";
+            }catch(Exception e){message="§cRemove failed: "+e.getMessage();}
+            ItemStack refund=item; UUID owner=seller; String msg=message;
+            Bukkit.getScheduler().runTask(plugin,()->{p.sendMessage(msg); if(refund!=null && owner!=null){Player sellerOnline=Bukkit.getPlayer(owner); if(sellerOnline!=null){Map<Integer,ItemStack> left=sellerOnline.getInventory().addItem(refund); if(!left.isEmpty())sellerOnline.getWorld().dropItemNaturally(sellerOnline.getLocation(),left.values().iterator().next()); sellerOnline.sendMessage("§eYour auction was removed by an administrator; the item was returned.");}}}});
+        });
+    }
+
+    public void settleExpiredAuctions() {
+        io.execute(() -> {
+            try(Connection c=dataSource.getConnection()) {
+                c.setAutoCommit(false);
+                List<UUID> ids=new ArrayList<>();
+                try(PreparedStatement ps=c.prepareStatement("SELECT id FROM smp_auction_listings WHERE status='OPEN' AND expires_at<=? ORDER BY expires_at LIMIT 25")) {
+                    ps.setTimestamp(1,Timestamp.from(Instant.now()));
+                    try(ResultSet r=ps.executeQuery()){while(r.next())ids.add((UUID)r.getObject(1));}
+                }
+                c.rollback();
+                for(UUID id:ids) settleOne(id);
+            } catch(Exception ignored) { }
+        });
+    }
+
+    private void settleOne(UUID id) {
+        try(Connection c=dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            Instant now=Instant.now(); UUID seller; UUID winner; long bid; ItemStack item;
+            try(PreparedStatement ps=c.prepareStatement("SELECT seller_id,item_data,status,highest_bidder,current_bid FROM smp_auction_listings WHERE id=? FOR UPDATE")){
+                ps.setObject(1,id);
+                try(ResultSet r=ps.executeQuery()){
+                    if(!r.next() || !"OPEN".equals(r.getString(3))) { c.rollback(); return; }
+                    seller=(UUID)r.getObject(1); item=ItemStack.deserializeBytes(r.getBytes(2)); winner=(UUID)r.getObject(4); bid=r.getLong(5);
+                }
+            }
+            Player sellerOnline=Bukkit.getPlayer(seller);
+            Player winnerOnline=winner==null?null:Bukkit.getPlayer(winner);
+            if(winner!=null && winnerOnline==null) { c.rollback(); return; }
+            if(winner==null && sellerOnline==null) { c.rollback(); return; }
+
+            UUID correlation=UUID.randomUUID();
+            if(winner==null) {
+                try(PreparedStatement ps=c.prepareStatement("UPDATE smp_auction_listings SET status='EXPIRED',version=version+1 WHERE id=?")){ps.setObject(1,id);ps.executeUpdate();}
+                c.commit();
+                deliver(sellerOnline,item,"§aYour auction expired without a bid; the item has been returned.");
+            } else {
+                mutatePoints(c,seller,bid,"SYSTEM","Auction sale "+id,
+                        "{\"auction_id\":\""+id+"\",\"type\":\"SALE_PROCEEDS\"}",null,correlation,now);
+                try(PreparedStatement ps=c.prepareStatement("UPDATE smp_auction_listings SET status='SOLD',version=version+1 WHERE id=?")){ps.setObject(1,id);ps.executeUpdate();}
+                c.commit();
+                deliver(winnerOnline,item,"§aAuction won! Your item has been delivered.");
+                if(sellerOnline!=null) sellerOnline.sendMessage("§aYour auction sold for §e"+bid+" "+CURRENCY+"§a.");
+            }
+        } catch(Exception ignored) { }
+    }
+
+    private void deliver(Player player, ItemStack item, String message) {
+        if(player==null || item==null)return;
+        Bukkit.getScheduler().runTask(plugin,()->{
+            Map<Integer,ItemStack> left=player.getInventory().addItem(item);
+            for(ItemStack stack:left.values()) player.getWorld().dropItemNaturally(player.getLocation(),stack);
+            player.sendMessage(message);
+        });
+    }
+
 
     private void debit(Connection c, UUID player, long amount) throws SQLException {
         try(PreparedStatement ps=c.prepareStatement("UPDATE smp_point_accounts SET balance=balance-?,version=version+1,updated_at=? WHERE owner_type='PLAYER' AND owner_id=? AND currency_id=? AND balance>=?")){

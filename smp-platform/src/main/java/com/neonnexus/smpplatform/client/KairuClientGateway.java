@@ -105,6 +105,8 @@ public final class KairuClientGateway {
     private String perform(Player actor, String action, String[] args) {
         return switch (action) {
             case "status" -> "SMPPlatform connected.";
+            case "auction-browse" -> playerCommand(actor, "auction browse");
+            case "search" -> playerCommand(actor, "search " + require(args, 2, "Enter a player name."));
             case "setup" -> isAdmin(actor) ? "Server setup is ready. Run /kairuadmin setup preview, then /kairuadmin setup apply." : "Server setup requires administrator access.";
             case "travel" -> travel(actor, require(args, 2, "Choose a world."));
             case "heal", "feed", "teleport", "enderchest", "clear-inventory", "clear-effects", "xp-zero", "gamemode-survival", "gamemode-creative", "gamemode-adventure", "gamemode-spectator" -> playerAction(actor, action, requireUuid(args, 2));
@@ -211,6 +213,13 @@ public final class KairuClientGateway {
     private static String decodeValue(String encoded) {
         try { return new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8); }
         catch (IllegalArgumentException exception) { throw new IllegalArgumentException("The setting value could not be read."); }
+    }
+
+    /** Routes menu-only convenience actions through the normal Bukkit command handlers so their
+     * existing permission checks remain authoritative. */
+    private String playerCommand(Player actor, String command) {
+        if (!actor.performCommand(command)) throw new IllegalArgumentException("SMPPlatform could not run that command.");
+        return "Command sent: /" + command;
     }
 
     private String travel(Player player, String id) {
@@ -427,7 +436,7 @@ public final class KairuClientGateway {
         return rows;
     }
     private static void flag(JsonArray rows, String id, String name, String description, String type, boolean editable) { JsonObject row = new JsonObject(); row.addProperty("id", id); row.addProperty("name", name); row.addProperty("description", description); row.addProperty("type", type); row.addProperty("boolean", editable); rows.add(row); }
-    private static JsonArray manageableRoles() { JsonArray rows = new JsonArray(); for (String name : List.of("member", "builder", "helper", "moderator", "administrator")) { JsonObject role = new JsonObject(); role.addProperty("name", name); rows.add(role); } return rows; }
+    private static JsonArray manageableRoles() { JsonArray rows = new JsonArray(); for (String name : List.of("member", "trusted", "moderator", "admin", "owner")) { JsonObject role = new JsonObject(); role.addProperty("name", name); rows.add(role); } return rows; }
     private boolean permits(Player player, String action) { return player.isOp() || (isAdmin(player) && player.hasPermission("smpplatform.admin." + action)); }
     private static boolean isAdmin(Player player) { return player.isOp() || player.hasPermission("smpplatform.admin"); }
     private static void requirePermission(Player player, String permission) { if (!player.isOp() && !player.hasPermission(permission)) throw new IllegalArgumentException("You do not have permission for that action."); }

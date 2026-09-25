@@ -398,6 +398,11 @@ public final class SMPPlatform extends JavaPlugin {
             snapshot.worlds().values().forEach(world -> sender.sendMessage(" - " + world.displayName() + " [" + world.id() + "] " + world.status()));
             return true;
         }
+        if (name.equals("search")) return searchPlayers(sender, args);
+        if (name.equals("auction")) {
+            sender.sendMessage("§ePlayer auction storage is installed, but the settlement command surface is being wired to the existing points ledger before listings can be mutated.");
+            return true;
+        }
         if (name.equals("guild") || name.equals("points")) {
             Phase3Runtime runtime = phase3;
             if (runtime == null) {
@@ -414,6 +419,31 @@ public final class SMPPlatform extends JavaPlugin {
         }
         if (name.equals("build")) return build(sender, args);
         sender.sendMessage("§cThis SMPPlatform module is not active because its required production adapter is unavailable.");
+        return true;
+    }
+
+    private boolean searchPlayers(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("smpplatform.search.use") && !sender.isOp()) {
+            sender.sendMessage("§cYou do not have permission to search players.");
+            return true;
+        }
+        if (args.length == 0 || args[0].isBlank()) {
+            sender.sendMessage("§d/search <name>");
+            return true;
+        }
+        String query = String.join(" ", args).trim().toLowerCase(java.util.Locale.ROOT);
+        boolean seeHidden = sender.hasPermission("smpplatform.search.see-hidden") || sender.isOp();
+        int found = 0;
+        for (org.bukkit.OfflinePlayer target : Bukkit.getOfflinePlayers()) {
+            String name = target.getName();
+            if (name == null || !name.toLowerCase(java.util.Locale.ROOT).contains(query)) continue;
+            if (!seeHidden && !target.isOnline()) continue;
+            if (found++ >= 20) break;
+            String status = target.isOnline() ? "§aonline" : "§7offline";
+            sender.sendMessage("§f" + name + " §8(" + status + "§8)");
+        }
+        if (found == 0) sender.sendMessage("§7No matching players found.");
+        else if (found >= 20) sender.sendMessage("§7Showing the first 20 matches.");
         return true;
     }
 

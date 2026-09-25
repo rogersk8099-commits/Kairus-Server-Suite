@@ -408,10 +408,6 @@ public final class SMPPlatform extends JavaPlugin {
             return true;
         }
         if (name.equals("search")) return searchPlayers(sender, args);
-        if (name.equals("auction")) {
-            sender.sendMessage("§ePlayer auction storage is installed, but the settlement command surface is being wired to the existing points ledger before listings can be mutated.");
-            return true;
-        }
         if (name.equals("guild") || name.equals("points")) {
             Phase3Runtime runtime = phase3;
             if (runtime == null) {

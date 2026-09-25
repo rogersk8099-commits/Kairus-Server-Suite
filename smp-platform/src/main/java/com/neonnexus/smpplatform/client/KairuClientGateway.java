@@ -45,6 +45,29 @@ public final class KairuClientGateway {
             }));
             return true;
         }
+        if (action.equals("search-list")) {
+            if (!player.hasPermission("smpplatform.search.use")) { reply(player, requestId, "You do not have permission to search players.", "search", new JsonObject()); return true; }
+            String query = require(args, 2, "Enter a player name.").toLowerCase(Locale.ROOT);
+            boolean hidden = player.isOp() || player.hasPermission("smpplatform.search.see-hidden");
+            JsonArray results = new JsonArray();
+            Bukkit.getOfflinePlayers();
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                if (online.getName().toLowerCase(Locale.ROOT).contains(query)) {
+                    JsonObject row=new JsonObject(); row.addProperty("id",online.getUniqueId().toString()); row.addProperty("name",online.getName()); row.addProperty("online",true); row.addProperty("world",online.getWorld().getName()); results.add(row);
+                }
+            }
+            if (hidden) {
+                for (org.bukkit.OfflinePlayer offline : Bukkit.getOfflinePlayers()) {
+                    if (results.size() >= 20) break;
+                    if (offline.getName()!=null && offline.getName().toLowerCase(Locale.ROOT).contains(query) && Bukkit.getPlayer(offline.getUniqueId())==null) {
+                        JsonObject row=new JsonObject(); row.addProperty("id",offline.getUniqueId().toString()); row.addProperty("name",offline.getName()); row.addProperty("online",false); results.add(row);
+                    }
+                }
+            }
+            JsonObject data=new JsonObject(); data.add("results",results);
+            reply(player, requestId, results.size()+" player(s) found.", "search", data);
+            return true;
+        }
         if (action.equals("auction-list")) {
             if (plugin.auctionService() == null) { reply(player, requestId, "Auction service unavailable.", "auction", new JsonObject()); return true; }
             plugin.auctionService().clientBrowse(player, data -> Bukkit.getScheduler().runTask(plugin, () -> {

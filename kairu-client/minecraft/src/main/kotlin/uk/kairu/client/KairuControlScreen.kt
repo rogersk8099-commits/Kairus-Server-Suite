@@ -111,6 +111,8 @@ class KairuControlScreen : ComposeScreen() {
                     nav("Player", accent)
                     nav("Guilds", accent)
                     nav("Points", accent)
+                    nav("Auction", accent)
+                    nav("Search", accent)
                     nav("Atrium", accent)
                     // Administration is only exposed when SMPPlatform has granted
                     // an actual staff capability.  A normal player must not even see
@@ -148,6 +150,8 @@ class KairuControlScreen : ComposeScreen() {
                         "Claims" -> claims(surface)
                         "Guilds" -> guilds(surface)
                         "Points" -> points(surface)
+                        "Auction" -> auction(surface)
+                        "Search" -> searchPlayers(surface)
                         "Atrium" -> atrium(surface)
                         "Players" -> players(surface)
                         "Worlds" -> worlds(surface)
@@ -301,6 +305,28 @@ class KairuControlScreen : ComposeScreen() {
             ),
             modifier = Modifier.fillMaxWidth().height(38.dp)
         ) { Text(label) }
+    }
+
+    @Composable private fun auction(surface: Color) {
+        sectionTitle("Player Auction", "Browse listings, sell an item, or bid using your Kairu Points.")
+        controls(surface, listOf(
+            "Browse auction" to "auction-browse",
+            "Sell held item" to "auction-sell 1 60"
+        ), 2)
+        Text("Auction commands", color = Color(0xFF5BDBFF), fontSize = 16.sp)
+        Text("Use the server auction command for the full listing ID and bid amount.", color = Color(0xFFAAA7B9), fontSize = 13.sp)
+        controls(surface, listOf(
+            "Open auction chat view" to "auction-browse"
+        ), 2)
+    }
+
+    @Composable private fun searchPlayers(surface: Color) {
+        sectionTitle("Player Search", "Find online players by name. Results are returned by SMPPlatform.")
+        kairuField(searchQuery, { searchQuery = it.take(32) }, "Player name", Modifier.fillMaxWidth())
+        controls(surface, listOf(
+            "Search player" to "search " + searchQuery.trim()
+        ), 2)
+        Text("Search is permission checked by SMPPlatform; staff may also see hidden/offline matches.", color = Color(0xFFAAA7B9), fontSize = 13.sp)
     }
 
     @Composable private fun points(surface: Color) {
@@ -610,6 +636,6 @@ class KairuControlScreen : ComposeScreen() {
     }
 
     private fun pageFor(section: String): String = when (section.lowercase()) {
-        "guilds" -> "Guilds"; "points" -> "Points"; "claims" -> "Claims"; "atrium", "plots" -> "Atrium"; "players" -> "Players"; "worlds" -> "Worlds"; else -> "Player"
+        "guilds" -> "Guilds"; "points" -> "Points"; "claims" -> "Claims"; "auction" -> "Auction"; "search" -> "Search"; "atrium", "plots" -> "Atrium"; "players" -> "Players"; "worlds" -> "Worlds"; else -> "Player"
     }
 }

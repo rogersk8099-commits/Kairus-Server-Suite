@@ -51,6 +51,9 @@ commands:
     description: Claim and share protected land in enabled Kairu worlds.
     usage: /claim [radius|trust|untrust|info|abandon]
     permission: smpplatform.claim.use
+  auction:
+    description: Player auction house.
+    permission: smpplatform.auction.browse
   search:
     description: Search online and known player names.
     permission: smpplatform.search.use

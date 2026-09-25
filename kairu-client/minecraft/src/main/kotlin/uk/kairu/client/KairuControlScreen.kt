@@ -348,9 +348,19 @@ class KairuControlScreen : ComposeScreen() {
     @Composable private fun searchPlayers(surface: Color) {
         sectionTitle("Player Search", "Find online players by name. Results are returned by SMPPlatform.")
         kairuField(searchQuery, { searchQuery = it.take(32) }, "Player name", Modifier.fillMaxWidth())
-        controls(surface, listOf(
-            "Search player" to "search " + searchQuery.trim()
-        ), 2)
+        Button(onClick = { if (searchQuery.isNotBlank()) KairuControlBridge.request("search-list", searchQuery.trim()) },
+            colors = ButtonDefaults.buttonColors(backgroundColor = surface, contentColor = Color.White),
+            modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Search player") }
+        val results = KairuControlBridge.state()?.getAsJsonObject("search")?.getAsJsonArray("results")
+        Text("Results", color = Color(0xFF5BDBFF), fontSize = 16.sp)
+        if (results == null) Text("Enter a name and search.", color = Color(0xFFAAA7B9))
+        else if (results.size() == 0) Text("No players found.", color = Color(0xFFAAA7B9))
+        else results.forEach { entry ->
+            val row = entry.asJsonObject
+            selectionTile(row.get("name").asString,
+                if (row.get("online").asBoolean) "Online • " + row.get("world").asString else "Offline",
+                false) { }
+        }
         Text("Search is permission checked by SMPPlatform; staff may also see hidden/offline matches.", color = Color(0xFFAAA7B9), fontSize = 13.sp)
     }
 

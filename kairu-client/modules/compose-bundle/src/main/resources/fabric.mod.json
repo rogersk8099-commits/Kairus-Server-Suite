@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "kairu-compose-runtime",
+  "version": "${version}",
+  "name": "Kairu Compose Runtime",
+  "description": "Required UI runtime for the Kairu SMP client.",
+  "authors": [
+    "Kairu SMP"
+  ],
+  "contact": {
+    "homepage": "https://github.com/rogersk8099-commits/Kairus-Server-Suite",
+    "sources": "https://github.com/rogersk8099-commits/Kairus-Server-Suite"
+  },
+  "license": "Apache-2.0",
+  "environment": "client",
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "fabric-language-kotlin": ">=1.13.13+kotlin.2.4.10"
+  }
+}

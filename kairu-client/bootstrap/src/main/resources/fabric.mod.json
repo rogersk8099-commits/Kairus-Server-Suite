@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "Kairu SMP Client",
+  "description": "Kairu SMP's standalone Compose control-centre client.",
+  "authors": [
+    "Kairu SMP"
+  ],
+  "contact": {
+    "homepage": "https://github.com/rogersk8099-commits/Kairus-Server-Suite",
+    "sources": "https://github.com/rogersk8099-commits/Kairus-Server-Suite"
+  },
+  "icon": "oneconfig-icon.png",
+  "entrypoints": {
+    "client": ["uk.kairu.client.KairuComposeClient"]
+  },
+  "license": "LGPL-3.0",
+  "environment": "client",
+  "depends": {
+    "fabricloader": ">=0.12.0",
+    "minecraft": "${mc_version}",
+    "kairu-compose-runtime": ">=1.0.4",
+    "fabric-language-kotlin": ">=1.13.13+kotlin.2.4.10"
+  }
+}

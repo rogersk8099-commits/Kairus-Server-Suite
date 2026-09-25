@@ -1,38 +1,44 @@
-# Kairu Client UI
+![OneConfig_banner_wide](https://user-images.githubusercontent.com/62163840/226811571-ffe7a524-c96a-4b6e-9ca9-d29439f5174f.png)
 
-Optional Fabric client interface for Java players. It provides the Kairu dark, purple and neon-blue administration interface opened with **K** or `/smpadmin`.
+# OneConfig
+![Dev Workflow Status](https://img.shields.io/github/actions/workflow/status/Polyfrost/OneConfig/build.yml?style=for-the-badge&color=1452cc&label=build&branch=v1)
 
-## OneConfig UI runtime
+![Repository badge](https://repo.polyfrost.org/api/badge/latest/snapshots/org/polyfrost/oneconfig/1.8.9-forge?color=1452cc&name=OneConfig)
+![Loader repository badge](https://repo.polyfrost.org/api/badge/latest/snapshots/org/polyfrost/oneconfig/stage0?color=1452cc&name=Loader%20(for%20Legacy%20Forge))
 
-The client now vendors the pinned OneConfig source in `oneconfig-source/` and packages its
-Fabric 26.2 bootstrap *inside* the Kairu client. This gives the client the real OneConfig
-runtime without making players install a second mod. The original upstream licence and
-notice are retained in `oneconfig-source/LICENSE` and `ONECONFIG-NOTICE.md`.
+OneConfig is a free, open sourced configuration library by [Polyfrost](https://polyfrost.org), designed to give developers a simple config API, which users can interact with in an elegant user interface.
 
-## Authority boundary
+## ❔ General information
 
-The client is an interface only. It does not contain database credentials, Discord tokens, permission decisions, or gameplay logic. SMPPlatform remains authoritative and Bedrock players use server-side menus/forms.
+### Is it a client?
+While it may look like OneConfig is a client, in reality it's actually a standalone mod. You can actually [see for yourself](https://github.com/Polyfrost/OneConfig-Bootstrap), it doesn't come with any mods of it's own. It's left up to the user to decide which mods they want to actually use.
 
-Pressing **K** now first receives the server-authorised state and opens the real OneConfig
-Kairu landing page. Its Player and Administration categories lead into the relevant Kairu
-actions. The remaining detail pages are retained as a compatibility surface while they are
-ported one by one; each continues to use the same server-checked request protocol.
+## ⚡️ Getting started
+### Almost everything you could need to start using OneConfig can be found in [our documentation](https://docsv1.polyfrost.org). For further questions, feel free to make a developer ticket in [our discord](https://polyfrost.org/discord).
 
-## Current integration status
+## ℹ️ Example mod
+Please check out our [example mod](https://github.com/Polyfrost/OneConfigExampleMod/).
 
-This UI uses the `KAIRU_ADMIN_V2` request/reply protocol, now handled by SMPPlatform's permission-checked `kairuadmin` gateway. It provides server state, permitted world travel, player/world administration actions, readable Atrium settings labels, the caller's guild profile and PostgreSQL-backed points balances. Do not ship the client as a replacement for SMPPlatform.
+## 📄 Licenses and Supporting Projects
+<details>
+  <summary>License</summary>
+  OneConfig is free and open-source. Except where noted otherwise (below and/or in individual files), all code is licensed under BOTH 
+- version 3 of the GNU Lesser General Public License, **AND**
+- the Additional Terms Applicable to OneConfig, version 1.0 of the Additional Terms or (at your option) any later version.
 
-The Guilds page can also invite online players, manage members, change ranks, leave a guild, transfer ownership through a server-held 30-second two-step confirmation, and display the durable top-20 guild leaderboard. Every mutation is validated, audited and persisted by SMPPlatform; the client is never trusted as authority. The World admin page provides permission-checked time, weather, PvP, difficulty, selected gamerule, maintenance, and Multiverse load/unload controls. The Points page can display the caller's ledger and durable player leaderboards for each configured currency. Advanced PlotSquared editing remains a future gateway addition.
+Copies of version 3 of the GNU Lesser General Public License, version 1.0 of the Additional Terms Applicable to OneConfig, and version 3 of the GNU General Public License (which the GNU LGPLv3 supplements) can be found in the [**LICENSE**](https://github.com/Polyfrost/OneConfig/blob/master/LICENSE) file.
 
-## Build
+Polyfrost acts as the specified proxy when deciding whether future versions of the GNU Lesser General Public License shall apply. If Polyfrost publicly states the acceptance of a later version of the GNU Lesser General Public License, this is permanent authorization for you to choose that version for OneConfig. However, you **must still** be compliant with the Additional Terms Applicable to OneConfig.
+</details>
 
-Use Java 25 and run the following from PowerShell on Windows:
+<details>
+  <summary>Supporting Projects</summary>
 
-```powershell
-.\Build-OneConfig-Client.ps1
-```
+![YourKitLogo|50](https://www.yourkit.com/images/yklogo.png)
 
-It builds the bundled OneConfig Fabric 26.2 bootstrap, embeds it as a nested mod, then
-builds `build\libs\KairuSmpClient-0.5.0.jar`. Copy only that final Kairu JAR to the
-player's `mods` folder. Both client and SMPPlatform use Gradle 9.5.1; this accepts
-Temurin Java `25.0.4.1`. The expected Minecraft target is 26.2.
+YourKit supports open source projects with innovative and intelligent tools
+for monitoring and profiling Java and .NET applications. <br>
+YourKit is the creator of [YourKit Java Profiler](https://www.yourkit.com/java/profiler/),
+[YourKit .NET Profiler](https://www.yourkit.com/.net/profiler/),
+and [YourKit YouMonitor](https://www.yourkit.com/youmonitor/).
+</details>

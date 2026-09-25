@@ -1,6 +1,7 @@
 package com.neonnexus.smpplatform;
 
 import com.neonnexus.smpplatform.async.PlatformExecutors;
+import com.neonnexus.smpplatform.auction.AuctionService;
 import com.neonnexus.smpplatform.atrium.AtriumPlotFlagsMenu;
 import com.neonnexus.smpplatform.atrium.AtriumReviewMenu;
 import com.neonnexus.smpplatform.atrium.AtriumShowcaseMenu;
@@ -83,6 +84,7 @@ public final class SMPPlatform extends JavaPlugin {
     private AtriumReviewMenu atriumReviewMenu;
     private AtriumShowcaseMenu atriumShowcaseMenu;
     private KairuClientGateway clientGateway;
+    private AuctionService auctionService;
     private volatile String centralApiToken;
     private Instant startedAt;
     private QuarryLifecycleService quarryLifecycle;
@@ -136,6 +138,7 @@ public final class SMPPlatform extends JavaPlugin {
         database.start();
         if (!database.isAvailable()) return;
         phase3 = Phase3Runtime.start(this, database.requireDataSource(), executors.io(), Clock.systemUTC(), configuration.points().firstJoinReward(), configuration.points().featuredBuildReward(), configuration.guilds());
+            auctionService = new AuctionService(this, database.requireDataSource(), executors.io());
         atriumSubmissions = new AtriumSubmissionService(database.requireDataSource(), registry.require("atrium").minecraftWorldName());
         getLogger().info("Durable guild and points modules are active.");
         if (configuration.core().centralApi().enabled() && configuration.integrations().outbox().enabled()) {
@@ -396,6 +399,12 @@ public final class SMPPlatform extends JavaPlugin {
             var snapshot = registry.snapshot();
             sender.sendMessage("Neon Nexus worlds (revision " + snapshot.revision() + ", " + (snapshot.offlineMode() ? "cached/offline" : "synced") + "): ");
             snapshot.worlds().values().forEach(world -> sender.sendMessage(" - " + world.displayName() + " [" + world.id() + "] " + world.status()));
+            return true;
+        }
+        if (name.equals("auction")) {
+            if (auctionService == null) { sender.sendMessage("§cAuction service is unavailable."); return true; }
+            if (!(sender instanceof Player player)) { sender.sendMessage("§cAuction commands must be run in-game."); return true; }
+            auctionService.execute(player, args);
             return true;
         }
         if (name.equals("search")) return searchPlayers(sender, args);

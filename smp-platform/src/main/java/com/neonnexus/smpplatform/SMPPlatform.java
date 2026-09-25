@@ -138,7 +138,8 @@ public final class SMPPlatform extends JavaPlugin {
         database.start();
         if (!database.isAvailable()) return;
         phase3 = Phase3Runtime.start(this, database.requireDataSource(), executors.io(), Clock.systemUTC(), configuration.points().firstJoinReward(), configuration.points().featuredBuildReward(), configuration.guilds());
-            auctionService = new AuctionService(this, database.requireDataSource(), executors.io());
+        auctionService = new AuctionService(this, database.requireDataSource(), executors.io());
+        executors.scheduler().scheduleWithFixedDelay(auctionService::settleExpiredAuctions, 15, 15, TimeUnit.SECONDS);
         atriumSubmissions = new AtriumSubmissionService(database.requireDataSource(), registry.require("atrium").minecraftWorldName());
         getLogger().info("Durable guild and points modules are active.");
         if (configuration.core().centralApi().enabled() && configuration.integrations().outbox().enabled()) {

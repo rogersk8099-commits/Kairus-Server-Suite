@@ -330,11 +330,22 @@ public final class KairuClientGateway {
         boolean inAtrium = plugin.worldRegistry().find("atrium").map(definition -> definition.minecraftWorldName().equalsIgnoreCase(player.getWorld().getName())).orElse(false);
         state.addProperty("admin", isAdmin(player)); state.addProperty("plots", inAtrium); state.addProperty("plotWorld", "The Atrium");
         state.addProperty("online", Bukkit.getOnlinePlayers().size()); state.addProperty("tps", Bukkit.getTPS()[0]);
+        JsonObject profile = new JsonObject();
+        profile.addProperty("name", player.getName()); profile.addProperty("world", player.getWorld().getName());
+        profile.addProperty("gamemode", player.getGameMode().name().toLowerCase(Locale.ROOT));
+        profile.addProperty("health", Math.round(player.getHealth()) + "/" + Math.round(player.getMaxHealth()));
+        profile.addProperty("food", player.getFoodLevel() + "/20"); state.add("profile", profile);
         JsonArray permissions = new JsonArray();
         for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events", "creative")) if (permits(player, action)) permissions.add(action);
         state.add("permissions", permissions); state.add("players", players()); state.add("worlds", worlds()); state.add("travelWorlds", travelWorlds(player)); state.add("flags", readableFlags());
         if (permits(player, "roles")) state.add("roles", manageableRoles());
-        if (view != null && viewData != null) state.add(switch (view) { case "guild-summary" -> "guild"; case "points-summary" -> "points"; default -> view; }, viewData);
+        if (view != null && viewData != null) {
+            String key = switch (view) { case "guild-summary" -> "guild"; case "points-summary" -> "points"; default -> view; };
+            state.add(key, viewData);
+            // Older Compose builds expected balances at the top level. Keep that shape too,
+            // so an upgrade never leaves the Points page blank after a successful response.
+            if (view.equals("points-summary") && viewData.has("balances")) state.add("balances", viewData.get("balances"));
+        }
         player.sendMessage(PREFIX + state);
     }
 

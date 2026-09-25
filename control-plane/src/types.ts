@@ -148,6 +148,7 @@ export type AppConfig = {
   discordBotToken?: string;
   discordApplicationId?: string;
   discordGuildId?: string;
+  discordOwnerRoleId?: string;
   membershipRoleMap: Record<string, string>;
   websiteApiSecret?: string;
   sessionSecret?: string;

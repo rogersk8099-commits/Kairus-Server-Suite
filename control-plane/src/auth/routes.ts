@@ -28,6 +28,22 @@ const demoSchema = z.object({ displayName: z.string().trim().min(1).max(32).rege
 
 type Fetch = typeof fetch;
 
+/** A website owner is either the actual Discord guild owner or holds the configured Kairu Owner role. */
+async function isDiscordOwner(config: AppConfig, discordUserId: string): Promise<boolean> {
+  if (!config.discordBotToken || !config.discordGuildId) return false;
+  const headers = { authorization: `Bot ${config.discordBotToken}`, accept: "application/json" };
+  try {
+    const [guildResponse, memberResponse] = await Promise.all([
+      fetch(`https://discord.com/api/v10/guilds/${config.discordGuildId}`, { headers, signal: AbortSignal.timeout(5_000) }),
+      fetch(`https://discord.com/api/v10/guilds/${config.discordGuildId}/members/${discordUserId}`, { headers, signal: AbortSignal.timeout(5_000) }),
+    ]);
+    const guild = guildResponse.ok ? await guildResponse.json() as { owner_id?: string } : null;
+    if (guild?.owner_id === discordUserId) return true;
+    const member = memberResponse.ok ? await memberResponse.json() as { roles?: string[] } : null;
+    return !!config.discordOwnerRoleId && Array.isArray(member?.roles) && member.roles.includes(config.discordOwnerRoleId);
+  } catch { return false; }
+}
+
 function requireAuthConfig(config: AppConfig) {
   if (!config.websiteApiSecret || !config.sessionSecret || !config.websiteUrl || !config.discordOAuthClientId || !config.discordOAuthClientSecret || !config.discordOAuthRedirectUri) {
     throw new AppError(503, "AUTH_NOT_CONFIGURED", "Website authentication is not configured");
@@ -95,7 +111,8 @@ export function registerAuthRoutes(
       new Date(Date.now() + SESSION_TTL_MS),
     );
     if (!session) throw new AppError(401, "LOGIN_TICKET_INVALID", "Login ticket is invalid, expired, or already used");
-    return { sessionToken, csrfToken: csrfTokenForSession(auth.sessionSecret, sessionToken), user: session.user, expiresAt: session.expiresAt };
+    const discordUserId = await store.getDiscordUserId(session.user.id);
+    return { sessionToken, csrfToken: csrfTokenForSession(auth.sessionSecret, sessionToken), user: session.user, expiresAt: session.expiresAt, isOwner: discordUserId ? await isDiscordOwner(config, discordUserId) : false };
   });
 
   app.post("/internal/auth/sessions/validate", async (request) => {
@@ -104,7 +121,8 @@ export function registerAuthRoutes(
     const { sessionToken } = tokenSchema.parse(request.body);
     const session = await store.validateSession(hashAuthValue(auth.sessionSecret, "session", sessionToken));
     if (!session) throw new AppError(401, "SESSION_INVALID", "Session is invalid, expired, or revoked");
-    return { user: session.user, expiresAt: session.expiresAt, csrfToken: csrfTokenForSession(auth.sessionSecret, sessionToken) };
+    const discordUserId = await store.getDiscordUserId(session.user.id);
+    return { user: session.user, expiresAt: session.expiresAt, csrfToken: csrfTokenForSession(auth.sessionSecret, sessionToken), isOwner: discordUserId ? await isDiscordOwner(config, discordUserId) : false };
   });
 
   app.post("/internal/auth/sessions/revoke", async (request) => {

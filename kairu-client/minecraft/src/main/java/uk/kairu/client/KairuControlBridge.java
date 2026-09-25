@@ -44,6 +44,7 @@ public final class KairuControlBridge {
         switch (section) {
             case "guilds" -> request("guild-summary");
             case "points" -> request("points-summary");
+            case "auction" -> request("auction-list");
             default -> request("status");
         }
     }

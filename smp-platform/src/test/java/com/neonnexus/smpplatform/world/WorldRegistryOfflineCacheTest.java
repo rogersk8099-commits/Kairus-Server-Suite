@@ -17,6 +17,6 @@ class WorldRegistryOfflineCacheTest {
         registry.bootstrapFromCache(); registry.setOffline("Central API unavailable");
         assertEquals(7, registry.snapshot().revision()); assertTrue(registry.snapshot().offlineMode());
         assertEquals("The Quarry", registry.require("quarry").displayName());
-        assertInstanceOf(ResetPolicy.Weekly.class, registry.require("quarry").resetPolicy());
+        assertInstanceOf(ResetPolicy.Interval.class, registry.require("quarry").resetPolicy());
     }
 }

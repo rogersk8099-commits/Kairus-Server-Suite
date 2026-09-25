@@ -1,11 +1,12 @@
 package com.neonnexus.smpplatform.world;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Objects;
 
-public sealed interface ResetPolicy permits ResetPolicy.None, ResetPolicy.Weekly, ResetPolicy.Manual {
+public sealed interface ResetPolicy permits ResetPolicy.None, ResetPolicy.Weekly, ResetPolicy.Interval, ResetPolicy.Manual {
     String kind();
 
     record None() implements ResetPolicy {
@@ -19,6 +20,14 @@ public sealed interface ResetPolicy permits ResetPolicy.None, ResetPolicy.Weekly
             Objects.requireNonNull(timezone, "timezone");
         }
         @Override public String kind() { return "weekly"; }
+    }
+
+    record Interval(Duration interval, boolean safetyBackupRequired) implements ResetPolicy {
+        public Interval {
+            interval = Objects.requireNonNull(interval, "interval");
+            if (interval.isZero() || interval.isNegative()) throw new IllegalArgumentException("interval must be positive");
+        }
+        @Override public String kind() { return "interval"; }
     }
 
     record Manual(String reason) implements ResetPolicy {

@@ -11,7 +11,7 @@ public enum NexusWorld {
     OBSIDIAN_GATE("obsidian-gate", "Obsidian Gate", "HARDCORE", "Season 7", "Live"),
     ATRIUM("atrium", "The Atrium", "CREATIVE", "Permanent", "Live"),
     COLOSSEUM("colosseum", "Neon Colosseum", "EVENT", "Rotating", "Live"),
-    QUARRY("quarry", "The Quarry", "RESOURCE", "Weekly reset", "Seasonal"),
+    QUARRY("quarry", "The Quarry", "RESOURCE", "Hourly reset", "Seasonal"),
     VERDANCE("verdance", "Verdance", "ARCHIVE", "Season 6", "Archived");
 
     private final String id;

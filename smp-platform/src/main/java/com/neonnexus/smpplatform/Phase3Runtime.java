@@ -267,6 +267,7 @@ final class Phase3Runtime implements Listener {
     private void guildSummary(Actor actor, JsonObject result) {
         result.addProperty("creationCurrency", guildCreationCurrency);
         result.addProperty("creationCost", guildCreationCost);
+        guildTop(result);
         Guild guild = guildService.byPlayer(actor.playerId()).orElse(null);
         result.addProperty("inGuild", guild != null);
         if (guild == null) return;

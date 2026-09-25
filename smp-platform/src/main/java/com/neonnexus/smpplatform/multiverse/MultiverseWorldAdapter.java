@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -32,12 +33,16 @@ public final class MultiverseWorldAdapter {
         if (loadedWorld(definition).isPresent()) return true;
         if (!available()) { logger.warning("Cannot load " + definition.id() + ": Multiverse-Core is unavailable"); return false; }
         try {
-            Object core = multiverse.getClass().getMethod("getMVWorldManager").invoke(multiverse);
+            Object core = worldManager();
             Method loadWorld = core.getClass().getMethod("loadWorld", String.class);
             return (boolean) loadWorld.invoke(core, definition.minecraftWorldName());
         } catch (ReflectiveOperationException exception) {
-            logger.warning("Multiverse could not load " + definition.id() + ": " + exception.getMessage());
-            return false;
+            // Multiverse 5 changed its public manager accessor.  Its console commands are
+            // deliberately used as the final compatibility path, with the loaded-world state
+            // checked afterwards rather than trusting dispatchCommand's return value.
+            logger.fine("Multiverse API load fallback for " + definition.id() + ": " + exception.getMessage());
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv load " + definition.minecraftWorldName());
+            return Bukkit.getWorld(definition.minecraftWorldName()) != null;
         }
     }
 
@@ -45,11 +50,12 @@ public final class MultiverseWorldAdapter {
     public boolean unload(WorldDefinition definition, boolean save) {
         if (!available()) return false;
         try {
-            Object core = multiverse.getClass().getMethod("getMVWorldManager").invoke(multiverse);
+            Object core = worldManager();
             return (boolean) core.getClass().getMethod("unloadWorld", String.class, boolean.class).invoke(core, definition.minecraftWorldName(), save);
         } catch (ReflectiveOperationException exception) {
-            logger.warning("Multiverse could not unload " + definition.id() + ": " + exception.getMessage());
-            return false;
+            logger.fine("Multiverse API unload fallback for " + definition.id() + ": " + exception.getMessage());
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv unload " + definition.minecraftWorldName());
+            return Bukkit.getWorld(definition.minecraftWorldName()) == null;
         }
     }
 
@@ -67,5 +73,13 @@ public final class MultiverseWorldAdapter {
     private static void applyDifficulty(World world, String raw) {
         try { world.setDifficulty(Difficulty.valueOf(raw.toUpperCase(java.util.Locale.ROOT))); }
         catch (IllegalArgumentException ignored) { /* Brutal/Event policies are enforced by higher-level world modules. */ }
+    }
+
+    private Object worldManager() throws ReflectiveOperationException {
+        for (String name : List.of("getWorldManager", "getMVWorldManager")) {
+            try { return multiverse.getClass().getMethod(name).invoke(multiverse); }
+            catch (NoSuchMethodException ignored) { /* try the next Multiverse generation */ }
+        }
+        throw new NoSuchMethodException(multiverse.getClass().getName() + " has no supported world-manager accessor");
     }
 }

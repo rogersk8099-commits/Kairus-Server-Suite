@@ -54,6 +54,20 @@ import java.util.UUID;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.neonnexus.smpplatform.protection.ClaimCommand;
+import com.neonnexus.smpplatform.protection.WorldProtectionListener;
+import com.neonnexus.smpplatform.protection.WorldProtectionService;
+import gg.neonnexus.smpplatform.lifecycle.events.FileDurableEventOutbox;
+import gg.neonnexus.smpplatform.lifecycle.paper.IntervalQuarryResetScheduler;
+import gg.neonnexus.smpplatform.lifecycle.paper.PaperQuarryGateway;
+import gg.neonnexus.smpplatform.lifecycle.paper.QuarryEntryListener;
+import gg.neonnexus.smpplatform.lifecycle.quarry.InMemoryQuarryResetRepository;
+import gg.neonnexus.smpplatform.lifecycle.quarry.QuarryLifecycleService;
+import gg.neonnexus.smpplatform.lifecycle.quarry.QuarryResetCoordinator;
+import gg.neonnexus.smpplatform.lifecycle.quarry.QuarryResetState;
+import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.configuration.file.YamlConfiguration;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Unified SMPPlatform bootstrap. Durable feature services activate only after PostgreSQL is healthy. */
 public final class SMPPlatform extends JavaPlugin {
@@ -71,6 +85,11 @@ public final class SMPPlatform extends JavaPlugin {
     private KairuClientGateway clientGateway;
     private volatile String centralApiToken;
     private Instant startedAt;
+    private QuarryLifecycleService quarryLifecycle;
+    private IntervalQuarryResetScheduler quarryResetSchedule;
+    private BukkitTask quarryResetTask;
+    private final AtomicBoolean quarryResetRunning = new AtomicBoolean();
+    private WorldProtectionService worldProtection;
 
     @Override public void onEnable() {
         try {
@@ -93,6 +112,10 @@ public final class SMPPlatform extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new PlayerIdentityListener(identities, getLogger()), this);
             getServer().getPluginManager().registerEvents(new ControlPlaneBridgeListener(this), this);
             getServer().getPluginManager().registerEvents(new DiscordChatBridgeListener(this), this);
+            worldProtection = new WorldProtectionService(this);
+            getServer().getPluginManager().registerEvents(new WorldProtectionListener(worldProtection), this);
+            java.util.Objects.requireNonNull(getCommand("claim"), "claim command").setExecutor(new ClaimCommand(worldProtection));
+            startQuarryResetAutomation();
             database = new DatabaseService(configuration.core().database(), getLogger());
             executors.io().execute(this::startDatabaseServicesAsync);
             if (configuration.core().centralApi().enabled()) {
@@ -179,9 +202,89 @@ public final class SMPPlatform extends JavaPlugin {
 
     @Override public void onDisable() {
         publishBridgeEvent("SERVER_STOPPING", null, null, "Kairu SMP stopping", java.util.Map.of());
+        if (quarryResetTask != null) quarryResetTask.cancel();
         if (executors != null) executors.close();
         if (database != null) database.close();
         getLogger().info("SMPPlatform shutdown complete.");
+    }
+
+    /**
+     * The scheduled reset deliberately does not call Minekeep. Minekeep remains the operator's
+     * manual, off-server backup; this local verified snapshot is only the reset safety net.
+     */
+    private void startQuarryResetAutomation() {
+        try {
+            Path worldsFile = getDataFolder().toPath().resolve("worlds.yml");
+            YamlConfiguration worlds = YamlConfiguration.loadConfiguration(worldsFile.toFile());
+            String prefix = "worlds.quarry.reset-policy.";
+            if (!worlds.getBoolean(prefix + "automatic-enabled", true)) {
+                getLogger().info("Quarry automatic reset is disabled in worlds.yml.");
+                return;
+            }
+            long intervalMinutes = Math.max(5L, worlds.getLong(prefix + "interval-minutes", 60L));
+            List<Duration> warnings = worlds.getIntegerList(prefix + "warning-minutes").stream()
+                    .filter(value -> value > 0).map(value -> Duration.ofMinutes(value.longValue())).toList();
+            if (warnings.isEmpty()) warnings = List.of(Duration.ofMinutes(10), Duration.ofMinutes(5), Duration.ofMinutes(1));
+            WorldDefinition quarryDefinition = registry.require("quarry");
+            String quarryWorld = quarryDefinition.minecraftWorldName();
+            String hubWorld = registry.require("spawn-hub").minecraftWorldName();
+            int backupRetention = Math.max(1, worlds.getInt(prefix + "local-backup-retention", 24));
+            PaperQuarryGateway gateway = new PaperQuarryGateway(this, quarryWorld, hubWorld, getDataFolder().toPath().resolve("quarry-reset-backups"), backupRetention, multiverse, quarryDefinition);
+            quarryLifecycle = new QuarryLifecycleService(new QuarryResetCoordinator(gateway, new InMemoryQuarryResetRepository(),
+                    new FileDurableEventOutbox(getDataFolder().toPath().resolve("lifecycle-events.jsonl"))), executors.io());
+            getServer().getPluginManager().registerEvents(new QuarryEntryListener(gateway, quarryWorld, hubWorld), this);
+            quarryResetSchedule = new IntervalQuarryResetScheduler(Duration.ofMinutes(intervalMinutes), warnings, Instant.now());
+            quarryResetTask = Bukkit.getScheduler().runTaskTimer(this, this::pollQuarryResetSchedule, 20L, 20L);
+            getLogger().info("The Quarry will regenerate every " + intervalMinutes + " minutes; next reset " + quarryResetSchedule.nextReset() + ". Players are evacuated to Spawn Hub; " + backupRetention + " local reset backups are retained.");
+        } catch (RuntimeException exception) {
+            getLogger().warning("Quarry reset automation is disabled: " + exception.getMessage());
+        }
+    }
+
+    private void pollQuarryResetSchedule() {
+        if (quarryLifecycle == null || quarryResetSchedule == null) return;
+        IntervalQuarryResetScheduler.Poll poll = quarryResetSchedule.poll(Instant.now());
+        for (Duration warning : poll.warnings()) sendQuarryNotice("§6The Quarry regenerates in " + conciseDuration(warning) + ". Please leave safely.");
+        if (!poll.resetDue() || !quarryResetRunning.compareAndSet(false, true)) return;
+        sendQuarryNotice("§cThe Quarry is now resetting. You are being moved to Spawn Hub.");
+        quarryLifecycle.scheduledResetAsync().whenComplete((snapshot, error) -> Bukkit.getScheduler().runTask(this, () -> {
+            quarryResetRunning.set(false);
+            if (error != null || snapshot == null) {
+                getLogger().warning("Scheduled Quarry reset failed: " + (error == null ? "no result" : error.getClass().getSimpleName()));
+                Bukkit.broadcastMessage("§cThe Quarry reset did not complete; entry remains protected.");
+            } else if (snapshot.state() == QuarryResetState.COMPLETED) {
+                Bukkit.broadcastMessage("§aThe Quarry has regenerated and is open again.");
+            } else {
+                getLogger().warning("Scheduled Quarry reset ended in " + snapshot.state() + ": " + snapshot.detail());
+                Bukkit.broadcastMessage("§cThe Quarry reset was stopped safely: " + snapshot.detail());
+            }
+        }));
+    }
+
+    private void sendQuarryNotice(String message) {
+        World quarry = Bukkit.getWorld(registry.require("quarry").minecraftWorldName());
+        if (quarry != null) for (Player player : quarry.getPlayers()) player.sendMessage(message);
+    }
+
+    private static String conciseDuration(Duration duration) {
+        long minutes = duration.toMinutes();
+        return minutes > 0 ? minutes + " minute" + (minutes == 1 ? "" : "s") : duration.toSeconds() + " seconds";
+    }
+
+    public WorldProtectionService worldProtection() { return worldProtection; }
+
+    /** Called by the staff menu only after the gateway has checked administrator permission. */
+    public String requestManualQuarryReset() {
+        if (quarryLifecycle == null) throw new IllegalStateException("Quarry reset automation is not available.");
+        if (!quarryResetRunning.compareAndSet(false, true)) throw new IllegalStateException("A Quarry reset is already running.");
+        Bukkit.broadcastMessage("§cThe Quarry is being reset by an administrator. Players are being moved to Spawn Hub.");
+        quarryLifecycle.scheduledResetAsync().whenComplete((snapshot, error) -> Bukkit.getScheduler().runTask(this, () -> {
+            quarryResetRunning.set(false);
+            if (error != null || snapshot == null) Bukkit.broadcastMessage("§cThe Quarry reset did not complete; entry remains protected.");
+            else if (snapshot.state() == QuarryResetState.COMPLETED) Bukkit.broadcastMessage("§aThe Quarry has regenerated and is open again.");
+            else Bukkit.broadcastMessage("§cThe Quarry reset was stopped safely: " + snapshot.detail());
+        }));
+        return "Quarry reset started. Players are being moved to Spawn Hub.";
     }
 
     private void startHeartbeat() {

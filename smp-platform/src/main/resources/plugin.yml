@@ -46,6 +46,11 @@ commands:
   nxlifecycle:
     description: Confirmation-backed Hardcore and Quarry administration.
     permission: smpplatform.admin.lifecycle
+  claim:
+    aliases: [landclaim]
+    description: Claim and share protected land in enabled Kairu worlds.
+    usage: /claim [radius|trust|untrust|info|abandon]
+    permission: smpplatform.claim.use
   plotflags:
     aliases: [plothelp]
     description: Opens the player-readable Atrium plot settings guide.
@@ -93,6 +98,8 @@ permissions:
   smpplatform.admin.player.inventory: {default: op}
   smpplatform.admin.player.enderchest: {default: op}
   smpplatform.admin.player.freeze: {default: op}
+  smpplatform.claim.use: {default: true}
+  smpplatform.protection.bypass: {default: op}
   smpplatform.admin.moderation.warn: {default: op}
   smpplatform.admin.moderation.kick: {default: op}
   smpplatform.admin.moderation.mute: {default: op}

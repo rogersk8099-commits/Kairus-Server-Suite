@@ -167,9 +167,9 @@ worlds:
     display-name: "The Quarry"
     public-type: "Resource"
     module-type: RESOURCE
-    season: "Weekly reset"
+    season: "Hourly reset"
     status: SEASONAL
-    description: "Resource world that regenerates every Monday 04:00 UTC to protect the main map terrain."
+    description: "Resource world that regenerates every hour with a normal Overworld seed to protect the main map terrain."
     size: "12k x 12k"
     difficulty: NORMAL
     border-size: 12000
@@ -185,10 +185,19 @@ worlds:
     reset-policy:
       mode: SCHEDULED_REGENERATE
       timezone: UTC
-      cron: "0 4 * * MON"
+      # The plugin runs this interval. It does not automate Minekeep; take any Minekeep backup manually.
+      automatic-enabled: true
+      interval-minutes: 60
+      warning-minutes: [10, 5, 1]
+      # Local reset snapshots only; this is separate from your manual Minekeep backup.
+      local-backup-retention: 24
+      # Required: keep an untouched custom-map copy at plugins/SMPPlatform/quarry-template.
+      # It must contain level.dat, region/, entities/, and poi/ directly beneath that folder.
+      # The live Multiverse world remains at its registered path (for Kairu: world/dimensions/minecraft/quarry).
+      restore-source: quarry-template
       backup-required: true
       abort-on-backup-failure: true
-      evacuation-destination-world-id: ashfall
+      evacuation-destination-world-id: spawn-hub
     archive-policy: {mode: NONE, read-only-after-archive: false}
     access-permission: smpplatform.world.quarry
     spawn: {x: 0.5, y: 80.0, z: 0.5, yaw: 0.0, pitch: 0.0}

@@ -13,7 +13,7 @@ public enum NeonWorld {
     OBSIDIAN_GATE("obsidian-gate", "Obsidian Gate", "Hardcore", "Season 7", "Live", "8k x 8k", "Brutal", "One life; spectator until the reset window."),
     ATRIUM("atrium", "The Atrium", "Creative", "Permanent", "Live", "Plots 128x128", "Peaceful", "Permanent creative plots and featured builds."),
     COLOSSEUM("colosseum", "Neon Colosseum", "Events", "Rotating", "Live", "Instanced", "Normal", "Tournaments, duels, Block Rush and Gauntlet."),
-    QUARRY("quarry", "The Quarry", "Resource", "Weekly reset", "Seasonal", "12k x 12k", "Normal", "Resource gathering; resets Monday 04:00 UTC."),
+    QUARRY("quarry", "The Quarry", "Resource", "Hourly reset", "Seasonal", "12k x 12k", "Normal", "Resource gathering; regenerates every hour."),
     VERDANCE("verdance", "Verdance", "Survival / Archive", "Season 6", "Archived", "20k x 20k", "Hard", "Frozen archive open for tours.");
 
     private final String id, displayName, type, season, status, size, difficulty, description;

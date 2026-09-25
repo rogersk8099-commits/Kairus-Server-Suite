@@ -27,6 +27,8 @@ public final class KairuClientGateway {
     public static final String PREFIX = "KAIRU_ADMIN_V2:";
     private final SMPPlatform plugin;
     private final Map<UUID, PendingWorldUnload> pendingUnloads = new ConcurrentHashMap<>();
+    private final Map<UUID, Instant> pendingQuarryResets = new ConcurrentHashMap<>();
+    private final Map<UUID, Instant> pendingClaimAbandons = new ConcurrentHashMap<>();
     private static final Duration UNLOAD_CONFIRMATION_TTL = Duration.ofSeconds(30);
     private record PendingWorldUnload(String worldId, Instant expiresAt) { }
 
@@ -111,8 +113,22 @@ public final class KairuClientGateway {
             case "world-rule" -> worldRule(actor, require(args, 2, "Choose a world."), require(args, 3, "Choose a gamerule."), require(args, 4, "Choose true or false."));
             case "world-maintenance" -> worldMaintenance(actor, require(args, 2, "Choose a world."), require(args, 3, "Choose true or false."));
             case "world-load" -> worldLoad(actor, require(args, 2, "Choose a world."));
+            case "world-teleport" -> worldTeleport(actor, require(args, 2, "Choose a world."));
+            case "world-set-spawn" -> worldSetSpawn(actor, require(args, 2, "Choose a world."));
             case "world-unload-arm" -> armWorldUnload(actor, require(args, 2, "Choose a world."));
             case "world-unload-confirm" -> confirmWorldUnload(actor, require(args, 2, "Choose a world."));
+            case "world-protection" -> worldProtection(actor, require(args, 2, "Choose a world."), require(args, 3, "Choose true or false."));
+            case "world-placed-protection" -> worldPlacedProtection(actor, require(args, 2, "Choose a world."), require(args, 3, "Choose true or false."));
+            case "quarry-reset-arm" -> armQuarryReset(actor);
+            case "quarry-reset-confirm" -> confirmQuarryReset(actor);
+            case "server-save" -> serverSave(actor);
+            case "server-whitelist" -> serverWhitelist(actor, require(args, 2, "Choose true or false."));
+            case "claim-create" -> claimCreate(actor, args.length > 2 ? require(args, 2, "Choose a claim radius.") : null);
+            case "claim-info" -> plugin.worldProtection().describe(actor);
+            case "claim-trust" -> claimTrust(actor, requireUuid(args, 2), true);
+            case "claim-untrust" -> claimTrust(actor, requireUuid(args, 2), false);
+            case "claim-abandon-arm" -> armClaimAbandon(actor);
+            case "claim-abandon-confirm" -> confirmClaimAbandon(actor);
             case "plot-info", "plot-home", "plot-claim", "plot-auto" -> plotCommand(actor, action.substring("plot-".length()), null);
             case "plot-add", "plot-trust", "plot-remove", "plot-deny", "plot-undeny" -> plotCommand(actor, action.substring("plot-".length()), requireUuid(args, 2));
             case "plot-flag" -> plotBooleanFlag(actor, require(args, 2, "Choose a PlotSquared setting."), require(args, 3, "Choose a value."));
@@ -302,6 +318,20 @@ public final class KairuClientGateway {
         return plugin.multiverse().ensureLoaded(definition) ? definition.displayName() + " loaded." : "Multiverse could not load " + definition.displayName() + ".";
     }
 
+    private String worldTeleport(Player actor, String id) {
+        WorldDefinition definition = registeredAdminWorld(actor, id);
+        if (!plugin.multiverse().available()) throw new IllegalArgumentException("Multiverse-Core is unavailable.");
+        plugin.multiverse().teleport(actor, definition);
+        return "Teleporting to " + definition.displayName() + ".";
+    }
+
+    private String worldSetSpawn(Player actor, String id) {
+        World world = adminWorld(actor, id);
+        if (!actor.getWorld().equals(world)) throw new IllegalArgumentException("Stand in the selected world before setting its spawn.");
+        world.setSpawnLocation(actor.getLocation());
+        return world.getName() + " spawn was set to your current location.";
+    }
+
     private String armWorldUnload(Player actor, String id) {
         WorldDefinition definition = registeredAdminWorld(actor, id);
         if (definition.type() == com.neonnexus.smpplatform.world.WorldType.HUB) throw new IllegalArgumentException("Spawn Hub cannot be unloaded.");
@@ -318,6 +348,27 @@ public final class KairuClientGateway {
         if (affected != null && hub != null) for (Player player : List.copyOf(affected.getPlayers())) player.teleport(hub.getSpawnLocation());
         return plugin.multiverse().unload(definition, true) ? definition.displayName() + " unloaded safely." : "Multiverse could not unload " + definition.displayName() + ".";
     }
+
+    private String worldProtection(Player actor, String id, String value) {
+        WorldDefinition definition = registeredAdminWorld(actor, id); boolean enabled = booleanValue(value);
+        plugin.worldProtection().setEnabled(definition.minecraftWorldName(), enabled);
+        return definition.displayName() + " build protection is " + (enabled ? "enabled" : "disabled") + ".";
+    }
+    private String worldPlacedProtection(Player actor, String id, String value) {
+        WorldDefinition definition = registeredAdminWorld(actor, id); boolean enabled = booleanValue(value);
+        plugin.worldProtection().setTrackPlaced(definition.minecraftWorldName(), enabled);
+        return definition.displayName() + " placed-block protection is " + (enabled ? "enabled" : "disabled") + ".";
+    }
+    private String armQuarryReset(Player actor) { requirePermission(actor, "smpplatform.admin.quarry"); pendingQuarryResets.put(actor.getUniqueId(), Instant.now().plus(Duration.ofSeconds(30))); return "Quarry reset armed. Confirm within 30 seconds."; }
+    private String confirmQuarryReset(Player actor) { requirePermission(actor, "smpplatform.admin.quarry"); Instant until = pendingQuarryResets.remove(actor.getUniqueId()); if (until == null || until.isBefore(Instant.now())) throw new IllegalArgumentException("Quarry reset confirmation expired. Start again."); return plugin.requestManualQuarryReset(); }
+    private String serverSave(Player actor) { requirePermission(actor, "smpplatform.admin.monitor"); Bukkit.savePlayers(); Bukkit.getWorlds().forEach(World::save); return "All loaded worlds and player data were saved."; }
+    private String serverWhitelist(Player actor, String value) { requirePermission(actor, "smpplatform.admin.monitor"); boolean enabled = booleanValue(value); Bukkit.setWhitelist(enabled); return "Server whitelist is " + (enabled ? "enabled" : "disabled") + "."; }
+    private String claimCreate(Player actor, String requestedRadius) { int radius = requestedRadius == null ? plugin.worldProtection().defaultRadius() : parseClaimRadius(requestedRadius); var claim = plugin.worldProtection().create(actor, radius); return "Claim created: " + (claim.maxX() - claim.minX() + 1) + "×" + (claim.maxZ() - claim.minZ() + 1) + " blocks. Add builders from the Claims page."; }
+    private String claimTrust(Player actor, UUID targetId, boolean add) { Player target = Bukkit.getPlayer(targetId); if (target == null) throw new IllegalArgumentException("That player is no longer online."); if (add) plugin.worldProtection().trust(actor, target); else plugin.worldProtection().untrust(actor, target); return target.getName() + (add ? " can now build in this claim." : " can no longer build in this claim."); }
+    private String armClaimAbandon(Player actor) { plugin.worldProtection().ownClaimAt(actor); pendingClaimAbandons.put(actor.getUniqueId(), Instant.now().plus(Duration.ofSeconds(30))); return "Claim abandonment armed. Confirm within 30 seconds."; }
+    private String confirmClaimAbandon(Player actor) { Instant until = pendingClaimAbandons.remove(actor.getUniqueId()); if (until == null || until.isBefore(Instant.now())) throw new IllegalArgumentException("Claim abandonment confirmation expired. Start again."); plugin.worldProtection().abandon(actor); return "Claim abandoned. This land is no longer protected by that claim."; }
+    private static int parseClaimRadius(String value) { try { return Integer.parseInt(value); } catch (NumberFormatException exception) { throw new IllegalArgumentException("Claim radius must be a whole number."); } }
+    private static boolean booleanValue(String value) { if (value.equalsIgnoreCase("true")) return true; if (value.equalsIgnoreCase("false")) return false; throw new IllegalArgumentException("Choose true or false."); }
 
     private WorldDefinition registeredAdminWorld(Player actor, String id) {
         requirePermission(actor, "smpplatform.admin.worlds");
@@ -336,11 +387,15 @@ public final class KairuClientGateway {
         profile.addProperty("health", Math.round(player.getHealth()) + "/" + Math.round(player.getMaxHealth()));
         profile.addProperty("food", player.getFoodLevel() + "/20"); state.add("profile", profile);
         JsonArray permissions = new JsonArray();
-        for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events", "creative")) if (permits(player, action)) permissions.add(action);
+        for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events", "creative", "monitor")) if (permits(player, action)) permissions.add(action);
         state.add("permissions", permissions); state.add("players", players()); state.add("worlds", worlds()); state.add("travelWorlds", travelWorlds(player)); state.add("flags", readableFlags());
         if (permits(player, "roles")) state.add("roles", manageableRoles());
         if (view != null && viewData != null) {
-            String key = switch (view) { case "guild-summary" -> "guild"; case "points-summary" -> "points"; default -> view; };
+            String key = switch (view) {
+                case "guild-summary", "guild-top", "guild-invites" -> "guild";
+                case "points-summary", "points-history", "points-top" -> "points";
+                default -> view;
+            };
             state.add(key, viewData);
             // Older Compose builds expected balances at the top level. Keep that shape too,
             // so an upgrade never leaves the Points page blank after a successful response.
@@ -351,7 +406,7 @@ public final class KairuClientGateway {
 
     private JsonArray players() { JsonArray rows = new JsonArray(); for (Player player : Bukkit.getOnlinePlayers()) { JsonObject row = new JsonObject(); row.addProperty("id", player.getUniqueId().toString()); row.addProperty("name", player.getName()); row.addProperty("world", player.getWorld().getName()); rows.add(row); } return rows; }
     @SuppressWarnings("removal")
-    private JsonArray worlds() { JsonArray rows = new JsonArray(); for (WorldDefinition world : plugin.worldRegistry().snapshot().worlds().values()) { JsonObject row = new JsonObject(); World loaded = Bukkit.getWorld(world.minecraftWorldName()); row.addProperty("id", world.id()); row.addProperty("name", world.displayName()); row.addProperty("status", world.status().name()); row.addProperty("maintenance", world.maintenanceMode()); row.addProperty("loaded", loaded != null); if (loaded != null) { row.addProperty("pvp", loaded.getPVP()); row.addProperty("difficulty", loaded.getDifficulty().name().toLowerCase(Locale.ROOT)); row.addProperty("mobSpawning", Boolean.TRUE.equals(loaded.getGameRuleValue(GameRule.DO_MOB_SPAWNING))); row.addProperty("fireSpread", Boolean.TRUE.equals(loaded.getGameRuleValue(GameRule.DO_FIRE_TICK))); row.addProperty("keepInventory", Boolean.TRUE.equals(loaded.getGameRuleValue(GameRule.KEEP_INVENTORY))); } rows.add(row); } return rows; }
+    private JsonArray worlds() { JsonArray rows = new JsonArray(); for (WorldDefinition world : plugin.worldRegistry().snapshot().worlds().values()) { JsonObject row = new JsonObject(); World loaded = Bukkit.getWorld(world.minecraftWorldName()); row.addProperty("id", world.id()); row.addProperty("name", world.displayName()); row.addProperty("status", world.status().name()); row.addProperty("maintenance", world.maintenanceMode()); row.addProperty("loaded", loaded != null); row.addProperty("protection", plugin.worldProtection() != null && plugin.worldProtection().enabled(world.minecraftWorldName())); row.addProperty("placedProtection", plugin.worldProtection() != null && plugin.worldProtection().trackPlaced(world.minecraftWorldName())); if (loaded != null) { row.addProperty("pvp", loaded.getPVP()); row.addProperty("difficulty", loaded.getDifficulty().name().toLowerCase(Locale.ROOT)); row.addProperty("mobSpawning", Boolean.TRUE.equals(loaded.getGameRuleValue(GameRule.DO_MOB_SPAWNING))); row.addProperty("fireSpread", Boolean.TRUE.equals(loaded.getGameRuleValue(GameRule.DO_FIRE_TICK))); row.addProperty("keepInventory", Boolean.TRUE.equals(loaded.getGameRuleValue(GameRule.KEEP_INVENTORY))); } rows.add(row); } return rows; }
     private JsonArray travelWorlds(Player player) { JsonArray rows = new JsonArray(); for (WorldDefinition world : plugin.worldRegistry().snapshot().worlds().values()) if (world.isAvailableForPlayers() && (player.hasPermission(world.accessPermission()) || isAdmin(player))) { JsonObject row = new JsonObject(); row.addProperty("id", world.id()); row.addProperty("name", world.displayName()); rows.add(row); } return rows; }
     private static JsonArray readableFlags() {
         JsonArray rows = new JsonArray();

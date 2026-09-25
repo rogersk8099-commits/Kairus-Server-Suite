@@ -1,0 +1,12 @@
+# Enable only worlds where player builds should be protected. Ashfall is the default SMP build world.
+protection:
+  claims:
+    default-radius: 32
+    max-radius: 64
+  worlds:
+    ashfall: {enabled: true, placed-block-protection: true}
+    obsidian-gate: {enabled: false, placed-block-protection: false}
+    atrium: {enabled: false, placed-block-protection: false}
+    colosseum: {enabled: false, placed-block-protection: false}
+    quarry: {enabled: false, placed-block-protection: false}
+    verdance: {enabled: false, placed-block-protection: false}

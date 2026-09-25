@@ -99,33 +99,145 @@ public final class AuctionService {
         try { listing=UUID.fromString(args[1]); amount=Long.parseLong(args[2]); }
         catch(Exception e) { p.sendMessage("§cInvalid listing ID or amount."); return; }
         if (amount <= 0) { p.sendMessage("§cBid must be positive."); return; }
+
         io.execute(() -> {
             String result;
             try (Connection c=dataSource.getConnection()) {
                 c.setAutoCommit(false);
-                UUID seller, previousBidder=null; long previousBid=0, current;
-                try(PreparedStatement ps=c.prepareStatement("SELECT seller_id,current_bid,highest_bidder,status,expires_at FROM smp_auction_listings WHERE id=? FOR UPDATE")) {
+                UUID seller, previousBidder=null;
+                long previousBid=0, current;
+                Instant now=Instant.now();
+                UUID correlationId=UUID.randomUUID();
+
+                try(PreparedStatement ps=c.prepareStatement(
+                        "SELECT seller_id,current_bid,highest_bidder,status,expires_at FROM smp_auction_listings WHERE id=? FOR UPDATE")) {
                     ps.setObject(1,listing);
                     try(ResultSet r=ps.executeQuery()) {
                         if(!r.next()) throw new IllegalArgumentException("Listing not found.");
-                        seller=(UUID)r.getObject(1); current=r.getLong(2); previousBidder=(UUID)r.getObject(4);
-                        if(!"OPEN".equals(r.getString(3)) || r.getTimestamp(5).toInstant().isBefore(Instant.now())) throw new IllegalArgumentException("Listing is closed.");
+                        seller=(UUID)r.getObject(1);
+                        current=r.getLong(2);
+                        previousBidder=(UUID)r.getObject(3);
+                        previousBid=current;
+                        if(!"OPEN".equals(r.getString(4)) || r.getTimestamp(5).toInstant().isBefore(now))
+                            throw new IllegalArgumentException("Listing is closed.");
                         if(seller.equals(p.getUniqueId())) throw new IllegalArgumentException("You cannot bid on your own listing.");
                         if(amount <= current) throw new IllegalArgumentException("Bid must exceed the current bid.");
                     }
                 }
-                debit(c,p.getUniqueId(),amount);
-                if(previousBidder!=null && previousBid>0) credit(c,previousBidder,previousBid);
-                try(PreparedStatement ps=c.prepareStatement("UPDATE smp_auction_listings SET current_bid=?,highest_bidder=?,version=version+1 WHERE id=?")) {
-                    ps.setLong(1,amount); ps.setObject(2,p.getUniqueId()); ps.setObject(3,listing); ps.executeUpdate();
+
+                // The bidder's debit and the previous bidder's refund are part of the
+                // same database transaction as the auction update. Every movement also
+                // gets an immutable smp_point_transactions ledger row.
+                mutatePoints(c, p.getUniqueId(), -amount, "SYSTEM",
+                        "Auction bid " + listing,
+                        "{\"auction_id\":\"" + listing + "\",\"type\":\"BID\"}",
+                        p.getUniqueId(), correlationId, now);
+
+                if(previousBidder!=null && previousBid>0) {
+                    mutatePoints(c, previousBidder, previousBid, "REFUND",
+                            "Outbid refund for auction " + listing,
+                            "{\"auction_id\":\"" + listing + "\",\"type\":\"OUTBID_REFUND\"}",
+                            null, correlationId, now);
                 }
-                try(PreparedStatement ps=c.prepareStatement("INSERT INTO smp_auction_bids(id,listing_id,bidder_id,amount,created_at) VALUES (?,?,?,?,?)")) {
-                    ps.setObject(1,UUID.randomUUID()); ps.setObject(2,listing); ps.setObject(3,p.getUniqueId()); ps.setLong(4,amount); ps.setTimestamp(5,Timestamp.from(Instant.now())); ps.executeUpdate();
+
+                try(PreparedStatement ps=c.prepareStatement(
+                        "UPDATE smp_auction_listings SET current_bid=?,highest_bidder=?,version=version+1 WHERE id=?")) {
+                    ps.setLong(1,amount);
+                    ps.setObject(2,p.getUniqueId());
+                    ps.setObject(3,listing);
+                    if(ps.executeUpdate()!=1) throw new IllegalStateException("Auction listing changed unexpectedly.");
                 }
-                c.commit(); result="§aBid accepted: §e"+amount+" "+CURRENCY+".";
-            } catch(Exception e) { result="§cBid failed: "+e.getMessage(); }
-            String message=result; Bukkit.getScheduler().runTask(plugin,()->p.sendMessage(message));
+
+                try(PreparedStatement ps=c.prepareStatement(
+                        "INSERT INTO smp_auction_bids(id,listing_id,bidder_id,amount,created_at) VALUES (?,?,?,?,?)")) {
+                    ps.setObject(1,UUID.randomUUID());
+                    ps.setObject(2,listing);
+                    ps.setObject(3,p.getUniqueId());
+                    ps.setLong(4,amount);
+                    ps.setTimestamp(5,Timestamp.from(now));
+                    ps.executeUpdate();
+                }
+
+                c.commit();
+                result="§aBid accepted: §e"+amount+" "+CURRENCY+" §7(refunded the previous bidder if applicable).";
+            } catch(Exception e) {
+                result="§cBid failed: "+e.getMessage();
+            }
+            String message=result;
+            Bukkit.getScheduler().runTask(plugin,()->p.sendMessage(message));
         });
+    }
+
+    private void mutatePoints(Connection c, UUID player, long delta, String source, String reason,
+                              String metadataJson, UUID actorId, UUID correlationId, Instant now) throws SQLException {
+        UUID accountId;
+        long before;
+        long version;
+
+        try(PreparedStatement ps=c.prepareStatement(
+                "SELECT account_id,balance,version FROM smp_point_accounts WHERE owner_type='PLAYER' AND owner_id=? AND currency_id=? FOR UPDATE")) {
+            ps.setObject(1,player);
+            ps.setString(2,CURRENCY);
+            try(ResultSet r=ps.executeQuery()) {
+                if(r.next()) {
+                    accountId=(UUID)r.getObject(1);
+                    before=r.getLong(2);
+                    version=r.getLong(3);
+                } else {
+                    if(delta < 0) throw new IllegalArgumentException("Insufficient "+CURRENCY+".");
+                    accountId=UUID.randomUUID();
+                    before=0;
+                    version=0;
+                    try(PreparedStatement create=c.prepareStatement(
+                            "INSERT INTO smp_point_accounts(account_id,owner_type,owner_id,currency_id,balance,version,created_at,updated_at) VALUES(?,?,?,?,0,0,?,?)")) {
+                        create.setObject(1,accountId);
+                        create.setString(2,"PLAYER");
+                        create.setObject(3,player);
+                        create.setString(4,CURRENCY);
+                        create.setTimestamp(5,Timestamp.from(now));
+                        create.setTimestamp(6,Timestamp.from(now));
+                        create.executeUpdate();
+                    }
+                }
+            }
+        }
+
+        long after;
+        try {
+            after=Math.addExact(before,delta);
+        } catch(ArithmeticException ex) {
+            throw new IllegalArgumentException("Points amount is too large.");
+        }
+        if(after < 0) throw new IllegalArgumentException("Insufficient "+CURRENCY+".");
+
+        try(PreparedStatement ps=c.prepareStatement(
+                "UPDATE smp_point_accounts SET balance=?,version=version+1,updated_at=? WHERE account_id=? AND version=?")) {
+            ps.setLong(1,after);
+            ps.setTimestamp(2,Timestamp.from(now));
+            ps.setObject(3,accountId);
+            ps.setLong(4,version);
+            if(ps.executeUpdate()!=1) throw new IllegalStateException("Points account changed unexpectedly.");
+        }
+
+        try(PreparedStatement ps=c.prepareStatement(
+                "INSERT INTO smp_point_transactions " +
+                "(transaction_id,account_id,currency_id,amount,balance_before,balance_after,source,reason,metadata,world_id,actor_id,correlation_id,occurred_at) " +
+                "VALUES (?,?,?,?,?,?,?,? ,CAST(? AS jsonb),?,?,?,?)")) {
+            ps.setObject(1,UUID.randomUUID());
+            ps.setObject(2,accountId);
+            ps.setString(3,CURRENCY);
+            ps.setLong(4,delta);
+            ps.setLong(5,before);
+            ps.setLong(6,after);
+            ps.setString(7,source);
+            ps.setString(8,reason);
+            ps.setString(9,metadataJson);
+            ps.setNull(10,Types.VARCHAR);
+            if(actorId==null) ps.setNull(11,Types.OTHER); else ps.setObject(11,actorId);
+            ps.setObject(12,correlationId);
+            ps.setTimestamp(13,Timestamp.from(now));
+            ps.executeUpdate();
+        }
     }
 
     private void cancel(Player p, String[] args) {

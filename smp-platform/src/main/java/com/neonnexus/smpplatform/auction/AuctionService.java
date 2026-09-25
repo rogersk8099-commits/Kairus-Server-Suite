@@ -50,7 +50,7 @@ public final class AuctionService {
             JsonArray rows = new JsonArray();
             try (Connection c = dataSource.getConnection();
                  PreparedStatement ps = c.prepareStatement(
-                     "SELECT id,seller_id,quantity,starting_bid,current_bid,highest_bidder,created_at,expires_at " +
+                     "SELECT id,seller_id,quantity,starting_bid,current_bid,highest_bidder,created_at,expires_at,item_data " +
                      "FROM smp_auction_listings WHERE status='OPEN' AND expires_at>? ORDER BY created_at DESC LIMIT 50")) {
                 ps.setTimestamp(1, Timestamp.from(Instant.now()));
                 try (ResultSet r = ps.executeQuery()) {
@@ -59,6 +59,7 @@ public final class AuctionService {
                         row.addProperty("id", r.getObject(1).toString());
                         UUID seller=(UUID)r.getObject(2); row.addProperty("seller", seller.toString());
                         row.addProperty("quantity", r.getInt(3));
+                        try { ItemStack item = ItemStack.deserializeBytes(r.getBytes(9)); row.addProperty("item", item.getType().getKey().toString()); } catch (Exception ignored) { row.addProperty("item", "unknown"); }
                         row.addProperty("startingBid", r.getLong(4));
                         row.addProperty("currentBid", r.getLong(5));
                         Object bidder=r.getObject(6); if (bidder!=null) row.addProperty("highestBidder", bidder.toString());

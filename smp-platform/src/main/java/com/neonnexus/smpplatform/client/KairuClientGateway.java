@@ -45,6 +45,13 @@ public final class KairuClientGateway {
             }));
             return true;
         }
+        if (action.equals("auction-list")) {
+            if (plugin.auctionService() == null) { reply(player, requestId, "Auction service unavailable.", "auction", new JsonObject()); return true; }
+            plugin.auctionService().clientBrowse(player, data -> Bukkit.getScheduler().runTask(plugin, () -> {
+                Player online=Bukkit.getPlayer(player.getUniqueId()); if (online != null) { JsonObject wrapper=new JsonObject(); wrapper.add("listings", data); reply(online, requestId, "Auction listings updated.", "auction", wrapper); }
+            }));
+            return true;
+        }
         if (action.equals("points-history") || action.equals("points-top")) {
             String currency = require(args, 2, "Choose a currency.");
             plugin.clientPointsView(player, action, currency, data -> Bukkit.getScheduler().runTask(plugin, () -> {

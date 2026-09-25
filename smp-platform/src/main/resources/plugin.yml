@@ -57,9 +57,6 @@ commands:
   search:
     description: Search online and known player names.
     permission: smpplatform.search.use
-  auction:
-    description: Player auction house.
-    permission: smpplatform.auction.browse
   plotflags:
     aliases: [plothelp]
     description: Opens the player-readable Atrium plot settings guide.

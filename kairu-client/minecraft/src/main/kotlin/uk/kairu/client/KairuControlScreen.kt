@@ -67,6 +67,10 @@ class KairuControlScreen : ComposeScreen() {
     private var selectedPlotMemberId by mutableStateOf("")
     private var selectedPlotMemberName by mutableStateOf("")
     private var searchQuery by mutableStateOf("")
+    private var auctionBid by mutableStateOf("")
+    private var auctionPrice by mutableStateOf("")
+    private var auctionDuration by mutableStateOf("1440")
+    private var selectedAuctionId by mutableStateOf("")
     private var guildStep by mutableIntStateOf(0)
     private var worldDetail by mutableStateOf(false)
     private var playerTravel by mutableStateOf(false)
@@ -308,16 +312,37 @@ class KairuControlScreen : ComposeScreen() {
     }
 
     @Composable private fun auction(surface: Color) {
-        sectionTitle("Player Auction", "Browse listings, sell an item, or bid using your Kairu Points.")
-        controls(surface, listOf(
-            "Browse auction" to "auction-browse",
-            "Sell held item" to "auction-sell 1 60"
-        ), 2)
-        Text("Auction commands", color = Color(0xFF5BDBFF), fontSize = 16.sp)
-        Text("Use the server auction command for the full listing ID and bid amount.", color = Color(0xFFAAA7B9), fontSize = 13.sp)
-        controls(surface, listOf(
-            "Open auction chat view" to "auction-browse"
-        ), 2)
+        val data = KairuControlBridge.state()?.getAsJsonObject("auction")
+        val listings = data?.getAsJsonArray("listings")
+        sectionTitle("Player Auction", "Buy and sell player items using Kairu Points.")
+        controls(surface, listOf("Refresh listings" to "auction-list"), 2)
+        Text("Create listing", color = Color(0xFF5BDBFF), fontSize = 16.sp)
+        Text("Hold the item you want to sell in your main hand.", color = Color(0xFFAAA7B9), fontSize = 13.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            kairuField(auctionPrice, { auctionPrice = it.filter(Char::isDigit).take(12) }, "Starting price", Modifier.weight(1f))
+            kairuField(auctionDuration, { auctionDuration = it.filter(Char::isDigit).take(5) }, "Duration (minutes)", Modifier.weight(1f))
+        }
+        Button(onClick = { if (auctionPrice.isNotBlank()) KairuControlBridge.request("auction-sell", auctionPrice, auctionDuration.ifBlank { "1440" }) },
+            colors = ButtonDefaults.buttonColors(backgroundColor = surface, contentColor = Color.White), modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("List held item") }
+        Text("Open listings", color = Color(0xFF5BDBFF), fontSize = 16.sp)
+        if (listings == null) Text("Loading auction listings…", color = Color(0xFFAAA7B9))
+        else if (listings.size() == 0) Text("There are no open auctions right now.", color = Color(0xFFAAA7B9))
+        else listings.forEach { element ->
+            val row = element.asJsonObject
+            if (row.has("error")) Text(row.get("error").asString, color = Color(0xFFFF8AA7))
+            else {
+                val listingId = row.get("id").asString
+                val selected = selectedAuctionId == listingId
+                selectionTile("Listing " + listingId.take(8) + "…",
+                    "Qty " + row.get("quantity").asInt + " • Current bid " + row.get("currentBid").asLong + " KAIRU_POINTS • Expires " + row.get("expiresAt").asString,
+                    selected) { selectedAuctionId = listingId }
+                if (selected) {
+                    kairuField(auctionBid, { auctionBid = it.filter(Char::isDigit).take(12) }, "Bid amount", Modifier.fillMaxWidth())
+                    Button(onClick = { if (auctionBid.isNotBlank()) KairuControlBridge.request("auction-bid", listingId, auctionBid) },
+                        colors = ButtonDefaults.buttonColors(backgroundColor = surface, contentColor = Color.White), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Place bid") }
+                }
+            }
+        }
     }
 
     @Composable private fun searchPlayers(surface: Color) {

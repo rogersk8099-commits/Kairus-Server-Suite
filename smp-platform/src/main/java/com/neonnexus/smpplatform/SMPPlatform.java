@@ -648,6 +648,8 @@ public final class SMPPlatform extends JavaPlugin {
     public void openAtriumReviewQueue(Player player) { if (atriumReviewMenu != null) atriumReviewMenu.openQueue(player); }
     public void openAtriumShowcase(Player player) { if (atriumShowcaseMenu != null) atriumShowcaseMenu.open(player); }
     public void awardFeaturedBuild(UUID submissionId, UUID recipient) { Phase3Runtime runtime = phase3; if (runtime != null) runtime.awardFeaturedBuild(submissionId, recipient); }
+    public AuctionService auctionService() { return auctionService; }
+
     public void clientView(Player player, String view, Consumer<JsonObject> callback) {
         Phase3Runtime runtime = phase3;
         if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds and points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }

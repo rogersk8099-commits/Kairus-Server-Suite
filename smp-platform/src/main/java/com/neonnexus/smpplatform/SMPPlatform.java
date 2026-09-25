@@ -95,6 +95,7 @@ public final class SMPPlatform extends JavaPlugin {
         try {
             startedAt = Instant.now();
             configuration = new PlatformConfigurationLoader(this).load();
+            new com.neonnexus.smpplatform.luckperms.LuckPermsProvisioner(this).provision();
             executors = new PlatformExecutors(configuration.core().async().ioThreads(), configuration.core().async().shutdownTimeout());
             RegistryDocument initial = applyWorldOverrides(DefaultWorlds.document());
             registry = new WorldRegistry(initial, new WorldRegistryCache(getDataFolder().toPath().resolve(configuration.worlds().cacheFile()), getLogger()), Clock.systemUTC());

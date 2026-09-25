@@ -1,5 +1,7 @@
 package com.neonnexus.smpplatform.auction;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -11,7 +13,6 @@ import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ThreadLocalRandom;
 
 public final class AuctionService {
     private static final String CURRENCY = "KAIRU_POINTS";
@@ -37,6 +38,40 @@ public final class AuctionService {
             case "remove" -> remove(player, args);
             default -> help(player);
         }
+    }
+
+    public void clientBrowse(Player p, java.util.function.Consumer<JsonArray> callback) {
+        if (!p.hasPermission("smpplatform.auction.browse")) {
+            JsonArray error = new JsonArray();
+            JsonObject row = new JsonObject(); row.addProperty("error", "You do not have permission to browse auctions."); error.add(row);
+            callback.accept(error); return;
+        }
+        io.execute(() -> {
+            JsonArray rows = new JsonArray();
+            try (Connection c = dataSource.getConnection();
+                 PreparedStatement ps = c.prepareStatement(
+                     "SELECT id,seller_id,quantity,starting_bid,current_bid,highest_bidder,created_at,expires_at " +
+                     "FROM smp_auction_listings WHERE status='OPEN' AND expires_at>? ORDER BY created_at DESC LIMIT 50")) {
+                ps.setTimestamp(1, Timestamp.from(Instant.now()));
+                try (ResultSet r = ps.executeQuery()) {
+                    while (r.next()) {
+                        JsonObject row = new JsonObject();
+                        row.addProperty("id", r.getObject(1).toString());
+                        UUID seller=(UUID)r.getObject(2); row.addProperty("seller", seller.toString());
+                        row.addProperty("quantity", r.getInt(3));
+                        row.addProperty("startingBid", r.getLong(4));
+                        row.addProperty("currentBid", r.getLong(5));
+                        Object bidder=r.getObject(6); if (bidder!=null) row.addProperty("highestBidder", bidder.toString());
+                        row.addProperty("createdAt", r.getTimestamp(7).toInstant().toString());
+                        row.addProperty("expiresAt", r.getTimestamp(8).toInstant().toString());
+                        rows.add(row);
+                    }
+                }
+            } catch (Exception e) {
+                JsonObject row = new JsonObject(); row.addProperty("error", "Auction database unavailable."); rows.add(row);
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> callback.accept(rows));
+        });
     }
 
     private void help(Player p) {

@@ -58,6 +58,7 @@ public final class AuctionService {
                         JsonObject row = new JsonObject();
                         row.addProperty("id", r.getObject(1).toString());
                         UUID seller=(UUID)r.getObject(2); row.addProperty("seller", seller.toString());
+                        String sellerName = Bukkit.getOfflinePlayer(seller).getName(); if (sellerName != null) row.addProperty("sellerName", sellerName);
                         row.addProperty("quantity", r.getInt(3));
                         try { ItemStack item = ItemStack.deserializeBytes(r.getBytes(9)); row.addProperty("item", item.getType().getKey().toString()); } catch (Exception ignored) { row.addProperty("item", "unknown"); }
                         row.addProperty("startingBid", r.getLong(4));

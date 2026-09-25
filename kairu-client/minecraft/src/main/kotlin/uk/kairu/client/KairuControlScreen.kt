@@ -334,7 +334,7 @@ class KairuControlScreen : ComposeScreen() {
                 val listingId = row.get("id").asString
                 val selected = selectedAuctionId == listingId
                 selectionTile("Listing " + listingId.take(8) + "…",
-                    "Qty " + row.get("quantity").asInt + " • Current bid " + row.get("currentBid").asLong + " KAIRU_POINTS • Expires " + row.get("expiresAt").asString,
+                    "Item: " + (row.get("item")?.asString ?: "Unknown") + " • Seller: " + (row.get("sellerName")?.asString ?: "Unknown") + " • Qty " + row.get("quantity").asInt + " • Current bid " + row.get("currentBid").asLong + " KAIRU_POINTS • Expires " + row.get("expiresAt").asString,
                     selected) { selectedAuctionId = listingId }
                 if (selected) {
                     kairuField(auctionBid, { auctionBid = it.filter(Char::isDigit).take(12) }, "Bid amount", Modifier.fillMaxWidth())

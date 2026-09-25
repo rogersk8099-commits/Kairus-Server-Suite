@@ -200,7 +200,7 @@ public final class KairuClientGateway {
         requirePermission(actor, "smpplatform.admin.roles");
         if (Bukkit.getPluginManager().getPlugin("LuckPerms") == null) throw new IllegalArgumentException("LuckPerms is not available on this server.");
         String role = requestedRole.toLowerCase(Locale.ROOT);
-        if (!List.of("member", "builder", "helper", "moderator", "administrator").contains(role)) throw new IllegalArgumentException("That LuckPerms role is not assignable from this menu.");
+        if (!List.of("member", "trusted", "moderator", "admin", "owner").contains(role)) throw new IllegalArgumentException("That LuckPerms role is not assignable from this menu.");
         Player target = Bukkit.getPlayer(targetId);
         if (target == null) throw new IllegalArgumentException("That player is no longer online.");
         String verb = action.equals("role-add") ? "add" : "remove";

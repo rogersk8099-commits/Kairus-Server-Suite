@@ -15,6 +15,7 @@ java {
 
 repositories {
     mavenCentral()
+    maven("https://jitpack.io")
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     maven("https://repo.skriptlang.org/releases")
@@ -27,6 +28,7 @@ dependencies {
     compileOnly("com.intellectualsites.plotsquared:plotsquared-bukkit") { isTransitive = false }
     compileOnly("me.clip:placeholderapi:2.11.6")
     compileOnly("com.github.SkriptLang:Skript:2.10.0")
+    compileOnly("com.github.MilkBowl:VaultAPI:1.7.1")
     implementation("com.zaxxer:HikariCP:6.2.1")
     implementation("org.flywaydb:flyway-core:11.3.1")
     implementation("org.flywaydb:flyway-database-postgresql:11.3.1")

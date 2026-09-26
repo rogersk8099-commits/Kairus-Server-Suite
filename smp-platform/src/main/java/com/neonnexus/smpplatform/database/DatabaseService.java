@@ -11,7 +11,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
-/** PostgreSQL is authoritative for durable platform gameplay data; SQL must run via PlatformExecutors. */
+/** Optional local persistence for Minecraft-only/legacy modules. Shared platform data is owned by the Control Plane. */
 public final class DatabaseService implements AutoCloseable {
     public enum Health { STARTING, HEALTHY, UNAVAILABLE, CLOSED }
     private final PlatformConfiguration.Core.Database config;

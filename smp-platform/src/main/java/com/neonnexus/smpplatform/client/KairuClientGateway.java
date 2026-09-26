@@ -45,6 +45,251 @@ public final class KairuClientGateway {
             }));
             return true;
         }
+        if (action.equals("player-profile")) {
+            requirePermission(player,"smpplatform.admin.players");
+            if(args.length<3){reply(player,requestId,"Select a player first.",action);return true;}
+            try{
+                UUID targetId=UUID.fromString(args[2]);
+                JsonObject data=plugin.clientPlayerProfile(targetId);
+                reply(player,requestId,data.has("error")?data.get("error").getAsString():"Player profile loaded.","playerProfile",data);
+            }catch(Exception e){reply(player,requestId,"Invalid player selection.",action);}
+            return true;
+        }
+        if (action.equals("world-admin-summary")) {
+            requirePermission(player,"smpplatform.admin.worlds");
+            JsonObject data=plugin.clientWorldAdminSummary();
+            reply(player,requestId,"World administration loaded.","worldAdmin",data);
+            return true;
+        }
+        if (action.equals("hardcore-reset-status")) {
+            requirePermission(player,"smpplatform.admin.hardcore");
+            reply(player,requestId,"Reset window loaded.","hardcoreReset",plugin.clientHardcoreResetStatus());return true;
+        }
+        if (action.equals("hardcore-reset-configure")) {
+            if(args.length<4){reply(player,requestId,"Open and close timestamps are required.",action);return true;}
+            try{reply(player,requestId,plugin.clientHardcoreResetConfigure(player,args[2],args[3]),action);}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Reset window update failed.":e.getMessage(),action);}return true;
+        }
+        if (action.equals("hardcore-lookup")) {
+            requirePermission(player,"smpplatform.admin.hardcore");
+            try{UUID target=UUID.fromString(args[2]);reply(player,requestId,"Hardcore profile loaded.","hardcoreProfile",plugin.clientHardcoreLookup(target));}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Hardcore profile unavailable.":e.getMessage(),action);}return true;
+        }
+        if (action.equals("hardcore-state")) {
+            if(args.length<4){reply(player,requestId,"Target and state are required.",action);return true;}
+            try{UUID target=UUID.fromString(args[2]);String state=args[3].toUpperCase(java.util.Locale.ROOT);
+                String reason=args.length>4?String.join(" ",java.util.Arrays.copyOfRange(args,4,args.length)):"Hardcore administration";
+                reply(player,requestId,plugin.clientHardcoreState(player,target,state,reason),action);}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Hardcore update failed.":e.getMessage(),action);}return true;
+        }
+        if (action.equals("points-history")) {
+            requirePermission(player,"smpplatform.admin.points.inspect");
+            try{String target=args[2],currency=args.length>3?args[3]:"";int limit=args.length>4?Integer.parseInt(args[4]):25;
+                reply(player,requestId,"Point history loaded.","pointHistory",plugin.clientPointHistory(target,currency,limit));}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Point history unavailable.":e.getMessage(),action);}return true;
+        }
+        if (action.equals("points-leaderboard")) {
+            try{String currency=args.length>2?args[2]:"KAIRU_POINTS";int limit=args.length>3?Integer.parseInt(args[3]):25;
+                reply(player,requestId,"Leaderboard loaded.","pointLeaderboard",plugin.clientPointLeaderboard(currency,limit));}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Leaderboard unavailable.":e.getMessage(),action);}return true;
+        }
+        if (action.equals("guild-search")) {
+            requirePermission(player,"smpplatform.admin.guilds.info");
+            try{String query=args.length>2?args[2]:"";int limit=args.length>3?Integer.parseInt(args[3]):25;
+                reply(player,requestId,"Guild search loaded.","guildSearch",plugin.clientGuildSearch(query,limit));}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Guild search unavailable.":e.getMessage(),action);}return true;
+        }
+        if (action.equals("guild-admin") || action.equals("points-admin")) {
+            String area=action.equals("guild-admin")?"guilds":"points";
+            if(args.length<5){reply(player,requestId,"Operation, target and value are required.",action);return true;}
+            try{
+                String operation=args[2],target=args[3],value=args[4];
+                String reason=args.length>5?String.join(" ",java.util.Arrays.copyOfRange(args,5,args.length)):"Client administration";
+                reply(player,requestId,plugin.clientGuildPointsAdmin(player,area,operation,target,value,reason),action);
+            }catch(Exception e){reply(player,requestId,e.getMessage()==null?"Administration request failed.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("world-maintenance")) {
+            if(args.length<4){reply(player,requestId,"World and maintenance state are required.",action);return true;}
+            try{reply(player,requestId,plugin.clientWorldMaintenance(player,args[2],Boolean.parseBoolean(args[3])),action);}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Maintenance update failed.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("world-admin")) {
+            if(args.length<4){reply(player,requestId,"World and action are required.",action);return true;}
+            try{
+                String world=args[2],worldAction=args[3],argument=args.length>4?args[4]:"";
+                reply(player,requestId,plugin.clientWorldAdminAction(player,world,worldAction,argument),action);
+            }catch(Exception e){reply(player,requestId,e.getMessage()==null?"World action failed.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("inventory-slot")) {
+            if(args.length<6){reply(player,requestId,"Inventory slot request is incomplete.",action);return true;}
+            try{
+                UUID target=UUID.fromString(args[2]);boolean ender=Boolean.parseBoolean(args[3]);int slot=Integer.parseInt(args[4]);
+                String perm=ender?"smpplatform.admin.players.enderchest":"smpplatform.admin.players.inventory";requirePermission(player,perm);
+                JsonObject data=plugin.clientInventorySlot(target,ender,slot);reply(player,requestId,"Slot loaded.","inventorySlot",data);
+            }catch(Exception e){reply(player,requestId,e.getMessage()==null?"Slot unavailable.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("inventory-remove-prepare")) {
+            if(args.length<6){reply(player,requestId,"Remove request is incomplete.",action);return true;}
+            try{
+                UUID target=UUID.fromString(args[2]);boolean ender=Boolean.parseBoolean(args[3]);int slot=Integer.parseInt(args[4]);String fingerprint=args[5];
+                String confirmAction="inventory-remove:"+ender+":"+slot+":"+fingerprint;
+                reply(player,requestId,plugin.clientAdminPrepare(player,target,confirmAction,""),"inventoryRemovePrepared");
+            }catch(Exception e){reply(player,requestId,e.getMessage()==null?"Unable to prepare removal.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("inventory-edit")) {
+            if(args.length<8){reply(player,requestId,"Inventory edit request is incomplete.",action);return true;}
+            try{
+                UUID target=UUID.fromString(args[2]);boolean ender=Boolean.parseBoolean(args[3]);String edit=args[4];
+                int from=Integer.parseInt(args[5]);Integer to=args[6].equals("-")?null:Integer.valueOf(args[6]);String fingerprint=args[7];
+                reply(player,requestId,plugin.clientInventoryEdit(player,target,ender,edit,from,to,fingerprint),action);
+            }catch(Exception e){reply(player,requestId,e.getMessage()==null?"Inventory edit failed.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("admin-prepare")) {
+            if(args.length<4){reply(player,requestId,"Target and action are required.",action);return true;}
+            try{UUID target=UUID.fromString(args[2]);String pendingAction=args[3];
+                reply(player,requestId,plugin.clientAdminPrepare(player,target,pendingAction,args.length>4?args[4]:""),action);
+            }catch(Exception e){reply(player,requestId,"Invalid confirmation request.",action);}
+            return true;
+        }
+        if (action.equals("admin-confirm")) {
+            if(args.length<4){reply(player,requestId,"Target and action are required.",action);return true;}
+            try{reply(player,requestId,plugin.clientAdminConfirm(player,UUID.fromString(args[2]),args[3]),action);}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Confirmation failed.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("moderation-history")) {
+            requirePermission(player,"smpplatform.admin.players.moderation");
+            if(args.length<3){reply(player,requestId,"Select a player first.",action);return true;}
+            try{
+                plugin.clientModerationHistory(UUID.fromString(args[2]),data->Bukkit.getScheduler().runTask(plugin,()->reply(player,requestId,
+                    data.has("error")?data.get("error").getAsString():"Moderation history loaded.","moderationHistory",data)));
+            }catch(Exception e){reply(player,requestId,"Invalid player selection.",action);}
+            return true;
+        }
+        if (action.equals("moderate")) {
+            if(args.length<4){reply(player,requestId,"Player and moderation action are required.",action);return true;}
+            try{
+                UUID target=UUID.fromString(args[2]);String modAction=args[3];
+                long minutes=args.length>4?Long.parseLong(args[4]):0;
+                String reason=args.length>5?String.join(" ",java.util.Arrays.copyOfRange(args,5,args.length)):"No reason supplied.";
+                plugin.clientModerate(player,target,modAction,reason,minutes,message->reply(player,requestId,message,action));
+            }catch(Exception e){reply(player,requestId,"Invalid moderation request.",action);}
+            return true;
+        }
+        if (action.equals("player-inventory") || action.equals("player-ender")) {
+            requirePermission(player,action.equals("player-ender")?"smpplatform.admin.players.enderchest":"smpplatform.admin.players.inventory");
+            if(args.length<3){reply(player,requestId,"Select a player first.",action);return true;}
+            try{
+                JsonObject data=plugin.clientPlayerInventory(UUID.fromString(args[2]),action.equals("player-ender"));
+                reply(player,requestId,"Inventory loaded.","playerInventory",data);
+            }catch(Exception e){reply(player,requestId,e.getMessage()==null?"Inventory unavailable.":e.getMessage(),action);}
+            return true;
+        }
+        if (action.equals("player-admin")) {
+            if(args.length<4){reply(player,requestId,"Player and action are required.",action);return true;}
+            try{
+                UUID targetId=UUID.fromString(args[2]);
+                String playerAction=args[3];
+                String argument=args.length>4?String.join(" ",java.util.Arrays.copyOfRange(args,4,args.length)):"";
+                reply(player,requestId,plugin.clientPlayerAdminAction(player,targetId,playerAction,argument),action);
+            }catch(SecurityException e){reply(player,requestId,e.getMessage(),action);}
+            catch(Exception e){reply(player,requestId,e.getMessage()==null?"Player action failed.":e.getMessage(),action);}
+            return true;
+        }
+
+        if (action.equals("auction-browse") || action.equals("auction-listings") || action.equals("auction-bids")) {
+            requirePermission(player, "smpplatform.auction.browse");
+            java.util.function.Consumer<JsonObject> done = data -> Bukkit.getScheduler().runTask(plugin, () -> {
+                Player online=Bukkit.getPlayer(player.getUniqueId()); if(online==null)return;
+                reply(online, requestId, data.has("error")?data.get("error").getAsString():"Auction listings updated.", "auctionResults", data);
+            });
+            if(action.equals("auction-listings")) plugin.clientAuctionMine(player,done);
+            else plugin.clientAuctionBrowse(action.equals("auction-browse") && args.length>2?String.join(" ",java.util.Arrays.copyOfRange(args,2,args.length)).trim():"",done);
+            return true;
+        }
+        if (action.equals("auction-view")) {
+            requirePermission(player,"smpplatform.auction.buy");
+            if(args.length<3) throw new IllegalArgumentException("Listing id is required.");
+            reply(player,requestId,plugin.clientAuctionBuyPrepare(player,args[2]),action);
+            return true;
+        }
+        if (action.equals("auction-buy")) {
+            requirePermission(player,"smpplatform.auction.buy");
+            plugin.clientAuctionBuyConfirm(player,message -> reply(player,requestId,message,action));
+            return true;
+        }
+        if (action.equals("auction-collect")) {
+            requirePermission(player,"smpplatform.auction.browse");
+            plugin.clientAuctionCollect(player,message -> reply(player,requestId,message,action));
+            return true;
+        }
+        if (action.equals("auction-sell")) {
+            requirePermission(player,"smpplatform.auction.create");
+            if(args.length>2){
+                try{ double price=Double.parseDouble(args[2]); reply(player,requestId,plugin.clientAuctionSellPrepare(player,price),action); }
+                catch(NumberFormatException e){reply(player,requestId,"Enter a valid sale price.",action);}
+            } else plugin.clientAuctionSellConfirm(player,message->reply(player,requestId,message,action));
+            return true;
+        }
+        if (action.equals("auction-cancel")) {
+            requirePermission(player,"smpplatform.auction.cancel");
+            if(args.length<3){reply(player,requestId,"Select one of your listings to cancel.",action);return true;}
+            try{plugin.clientAuctionCancel(player,UUID.fromString(args[2]),message->reply(player,requestId,message,action));}
+            catch(IllegalArgumentException e){reply(player,requestId,"Invalid listing id.",action);}
+            return true;
+        }
+        if (action.equals("auction-bid")) {
+            requirePermission(player,"smpplatform.auction.bid");
+            if(args.length>=4){
+                try{reply(player,requestId,plugin.clientAuctionBidPrepare(player,args[2],Double.parseDouble(args[3])),action);}
+                catch(Exception e){reply(player,requestId,"Use a valid listing id and bid amount.",action);}
+            } else plugin.clientAuctionBidConfirm(player,message->reply(player,requestId,message,action));
+            return true;
+        }
+
+        if (action.equals("search-summary") || action.equals("search") || action.equals("search-filter")) {
+            requirePermission(player, "smpplatform.search.use");
+            String query = action.equals("search") && args.length > 2 ? String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)).trim() : "";
+            String filter = action.equals("search-filter") && args.length > 2 ? args[2].toLowerCase(Locale.ROOT) : "";
+            plugin.clientPlayerSearch(query, filter, data -> Bukkit.getScheduler().runTask(plugin, () -> {
+                Player online = Bukkit.getPlayer(player.getUniqueId());
+                if (online == null) return;
+                // Merge live presence without exposing private fields.
+                JsonArray rows = data.has("searchResults") ? data.getAsJsonArray("searchResults") : new JsonArray();
+                java.util.Set<String> known = new java.util.HashSet<>();
+                rows.forEach(value -> { if (value.getAsJsonObject().has("id")) known.add(value.getAsJsonObject().get("id").getAsString()); });
+                for (Player candidate : Bukkit.getOnlinePlayers()) {
+                    boolean matches = query.isBlank() || candidate.getName().toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))
+                            || candidate.getUniqueId().toString().equalsIgnoreCase(query);
+                    if (!matches || filter.equals("recent") || filter.equals("offline")) continue;
+                    if (known.contains(candidate.getUniqueId().toString())) {
+                        rows.forEach(value -> {
+                            JsonObject row = value.getAsJsonObject();
+                            if (row.has("id") && row.get("id").getAsString().equals(candidate.getUniqueId().toString())) {
+                                row.addProperty("online", true); row.addProperty("world", candidate.getWorld().getName());
+                            }
+                        });
+                    } else {
+                        JsonObject row = new JsonObject();
+                        row.addProperty("id", candidate.getUniqueId().toString());
+                        row.addProperty("name", candidate.getName());
+                        row.addProperty("platform", "Minecraft");
+                        row.addProperty("world", candidate.getWorld().getName());
+                        row.addProperty("online", true);
+                        rows.add(row);
+                    }
+                }
+                data.add("searchResults", rows);
+                reply(online, requestId, data.has("error") ? data.get("error").getAsString() : "Search updated.", "searchResults", data);
+            }));
+            return true;
+        }
         if (action.equals("points-history") || action.equals("points-top")) {
             String currency = require(args, 2, "Choose a currency.");
             plugin.clientPointsView(player, action, currency, data -> Bukkit.getScheduler().runTask(plugin, () -> {
@@ -84,6 +329,33 @@ public final class KairuClientGateway {
         return true;
     }
 
+    private String setupStatus(Player actor) {
+        requirePermission(actor, "smpplatform.admin.setup");
+        return "Server setup controls are connected. Preview or validate before applying changes.";
+    }
+
+    private String runSetup(Player actor, String mode) {
+        requirePermission(actor, "smpplatform.admin.setup");
+        if (!Bukkit.dispatchCommand(actor, "kairuadmin setup " + mode)) throw new IllegalArgumentException("SMPPlatform setup did not accept that request.");
+        return mode.equals("preview") ? "Setup preview printed to chat." : "Setup apply request completed; review the server messages.";
+    }
+
+    private String validateSetup(Player actor) {
+        requirePermission(actor, "smpplatform.admin.setup");
+        int missing = 0;
+        for (WorldDefinition definition : plugin.worldRegistry().snapshot().worlds().values()) {
+            if (Bukkit.getWorld(definition.minecraftWorldName()) == null && !definition.id().equals("spawn-hub")) missing++;
+        }
+        boolean lp = Bukkit.getPluginManager().getPlugin("LuckPerms") != null;
+        boolean mv = Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null;
+        boolean mvi = Bukkit.getPluginManager().getPlugin("Multiverse-Inventories") != null;
+        boolean plots = Bukkit.getPluginManager().getPlugin("PlotSquared") != null;
+        return "Validation: worlds missing=" + missing + "; LuckPerms=" + state(lp) + "; Multiverse=" + state(mv)
+                + "; Inventories=" + state(mvi) + "; PlotSquared=" + state(plots) + ".";
+    }
+
+    private static String state(boolean available) { return available ? "PASS" : "WARNING"; }
+
     private static String[] decodeGuildCreate(String encoded) {
         try {
             String[] values = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8).split("\\|", 3);
@@ -105,7 +377,10 @@ public final class KairuClientGateway {
     private String perform(Player actor, String action, String[] args) {
         return switch (action) {
             case "status" -> "SMPPlatform connected.";
-            case "setup" -> isAdmin(actor) ? "Server setup is ready. Run /kairuadmin setup preview, then /kairuadmin setup apply." : "Server setup requires administrator access.";
+            case "setup", "setup-status" -> setupStatus(actor);
+            case "setup-preview" -> runSetup(actor, "preview");
+            case "setup-apply" -> runSetup(actor, "apply");
+            case "setup-validate" -> validateSetup(actor);
             case "travel" -> travel(actor, require(args, 2, "Choose a world."));
             case "heal", "feed", "teleport", "enderchest", "clear-inventory", "clear-effects", "xp-zero", "gamemode-survival", "gamemode-creative", "gamemode-adventure", "gamemode-spectator" -> playerAction(actor, action, requireUuid(args, 2));
             case "day", "night", "clear", "rain", "thunder", "pvp-on", "pvp-off" -> worldAction(actor, action, require(args, 2, "Choose a world."));
@@ -200,7 +475,7 @@ public final class KairuClientGateway {
         requirePermission(actor, "smpplatform.admin.roles");
         if (Bukkit.getPluginManager().getPlugin("LuckPerms") == null) throw new IllegalArgumentException("LuckPerms is not available on this server.");
         String role = requestedRole.toLowerCase(Locale.ROOT);
-        if (!List.of("member", "builder", "helper", "moderator", "administrator").contains(role)) throw new IllegalArgumentException("That LuckPerms role is not assignable from this menu.");
+        if (!List.of("member", "trusted", "moderator", "admin", "owner").contains(role)) throw new IllegalArgumentException("That LuckPerms role is not assignable from this menu.");
         Player target = Bukkit.getPlayer(targetId);
         if (target == null) throw new IllegalArgumentException("That player is no longer online.");
         String verb = action.equals("role-add") ? "add" : "remove";
@@ -375,6 +650,10 @@ public final class KairuClientGateway {
         return plugin.worldRegistry().find(id.toLowerCase(Locale.ROOT)).orElseThrow(() -> new IllegalArgumentException("That Kairu world is not registered."));
     }
 
+    private void reply(Player player, String id, String message, String view) {
+        reply(player, id, message, view, null);
+    }
+
     private void reply(Player player, String id, String message, String view, JsonObject viewData) {
         JsonObject state = new JsonObject();
         state.addProperty("id", id); state.addProperty("authorized", true); state.addProperty("message", message);
@@ -387,7 +666,7 @@ public final class KairuClientGateway {
         profile.addProperty("health", Math.round(player.getHealth()) + "/" + Math.round(player.getMaxHealth()));
         profile.addProperty("food", player.getFoodLevel() + "/20"); state.add("profile", profile);
         JsonArray permissions = new JsonArray();
-        for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events", "creative", "monitor")) if (permits(player, action)) permissions.add(action);
+        for (String action : List.of("players", "worlds", "inventory", "roles", "kick", "moderation", "hardcore", "quarry", "events", "creative", "monitor", "search", "setup", "auction")) if (permits(player, action)) permissions.add(action);
         state.add("permissions", permissions); state.add("players", players()); state.add("worlds", worlds()); state.add("travelWorlds", travelWorlds(player)); state.add("flags", readableFlags());
         if (permits(player, "roles")) state.add("roles", manageableRoles());
         if (view != null && viewData != null) {
@@ -396,7 +675,20 @@ public final class KairuClientGateway {
                 case "points-summary", "points-history", "points-top" -> "points";
                 default -> view;
             };
-            state.add(key, viewData);
+            if (view.equals("hardcoreReset")) state.add("hardcoreReset",viewData);
+            else if (view.equals("hardcoreProfile")) state.add("hardcoreProfile",viewData);
+            else if (view.equals("pointHistory") && viewData.has("pointHistory")) state.add("pointHistory",viewData.get("pointHistory"));
+            else if (view.equals("pointLeaderboard") && viewData.has("pointLeaderboard")) state.add("pointLeaderboard",viewData.get("pointLeaderboard"));
+            else if (view.equals("guildSearch") && viewData.has("guildSearch")) state.add("guildSearch",viewData.get("guildSearch"));
+            else if (view.equals("worldAdmin") && viewData.has("worldAdmin")) state.add("worldAdmin",viewData.get("worldAdmin"));
+            else if (view.equals("inventorySlot")) state.add("inventorySlot",viewData);
+            else if (view.equals("moderationHistory") && viewData.has("moderationHistory")) state.add("moderationHistory",viewData.get("moderationHistory"));
+            else if (view.equals("playerInventory")) state.add("playerInventory", viewData);
+            else if (view.equals("playerProfile")) state.add("playerProfile", viewData);
+            else if (view.equals("auction-db-status")) state.add("auctionDatabase", viewData);
+            else if (view.equals("auctionResults") && viewData.has("auctionListings")) state.add("auctionListings", viewData.get("auctionListings"));
+            else if (view.equals("searchResults") && viewData.has("searchResults")) state.add("searchResults", viewData.get("searchResults"));
+            else state.add(key, viewData);
             // Older Compose builds expected balances at the top level. Keep that shape too,
             // so an upgrade never leaves the Points page blank after a successful response.
             if (view.equals("points-summary") && viewData.has("balances")) state.add("balances", viewData.get("balances"));
@@ -427,7 +719,7 @@ public final class KairuClientGateway {
         return rows;
     }
     private static void flag(JsonArray rows, String id, String name, String description, String type, boolean editable) { JsonObject row = new JsonObject(); row.addProperty("id", id); row.addProperty("name", name); row.addProperty("description", description); row.addProperty("type", type); row.addProperty("boolean", editable); rows.add(row); }
-    private static JsonArray manageableRoles() { JsonArray rows = new JsonArray(); for (String name : List.of("member", "builder", "helper", "moderator", "administrator")) { JsonObject role = new JsonObject(); role.addProperty("name", name); rows.add(role); } return rows; }
+    private static JsonArray manageableRoles() { JsonArray rows = new JsonArray(); for (String name : List.of("member", "trusted", "moderator", "admin", "owner")) { JsonObject role = new JsonObject(); role.addProperty("name", name); rows.add(role); } return rows; }
     private boolean permits(Player player, String action) { return player.isOp() || (isAdmin(player) && player.hasPermission("smpplatform.admin." + action)); }
     private static boolean isAdmin(Player player) { return player.isOp() || player.hasPermission("smpplatform.admin"); }
     private static void requirePermission(Player player, String permission) { if (!player.isOp() && !player.hasPermission(permission)) throw new IllegalArgumentException("You do not have permission for that action."); }

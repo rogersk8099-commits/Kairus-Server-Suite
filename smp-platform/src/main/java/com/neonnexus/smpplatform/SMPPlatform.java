@@ -1,5 +1,6 @@
 package com.neonnexus.smpplatform;
 
+import com.neonnexus.smpplatform.integrations.api.PlatformGuildPointsClient;
 import com.neonnexus.smpplatform.async.PlatformExecutors;
 import com.neonnexus.smpplatform.atrium.AtriumPlotFlagsMenu;
 import com.neonnexus.smpplatform.atrium.AtriumReviewMenu;
@@ -9,6 +10,10 @@ import com.neonnexus.smpplatform.client.KairuClientGateway;
 import com.neonnexus.smpplatform.config.PlatformConfiguration;
 import com.neonnexus.smpplatform.config.PlatformConfigurationLoader;
 import com.neonnexus.smpplatform.database.DatabaseService;
+import com.neonnexus.smpplatform.search.PlayerSearchService;
+import com.neonnexus.smpplatform.auction.AuctionService;
+import com.neonnexus.smpplatform.auction.AuctionIdentityResolver;
+import com.neonnexus.smpplatform.auction.AuctionConfirmations;
 import com.neonnexus.smpplatform.identity.FloodgateIdentityAdapter;
 import com.neonnexus.smpplatform.listeners.PlayerIdentityListener;
 import com.neonnexus.smpplatform.listeners.ControlPlaneBridgeListener;
@@ -32,6 +37,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.Bukkit;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
+import org.bukkit.GameMode;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
@@ -68,6 +74,18 @@ import gg.neonnexus.smpplatform.lifecycle.quarry.QuarryResetState;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.configuration.file.YamlConfiguration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import com.neonnexus.smpplatform.administration.ClientPlayerAdminService;
+import com.neonnexus.smpplatform.administration.ModerationRepository;
+import com.neonnexus.smpplatform.administration.ModerationListener;
+import com.neonnexus.smpplatform.administration.AdminConfirmations;
+import com.neonnexus.smpplatform.administration.InventoryAuditRepository;
+import com.neonnexus.smpplatform.administration.ClientWorldAdminService;
+import com.neonnexus.smpplatform.administration.WorldMaintenanceService;
+import com.neonnexus.smpplatform.administration.GuildPointsAdminFacade;
+import com.neonnexus.smpplatform.administration.GuildPointsQueryService;
+import com.neonnexus.smpplatform.administration.HardcoreAdminRepository; 
+import com.neonnexus.smpplatform.administration.HardcoreLifecycleListener;
+import com.neonnexus.smpplatform.administration.HardcoreResetWindowService;
 
 /** Unified SMPPlatform bootstrap. Durable feature services activate only after PostgreSQL is healthy. */
 public final class SMPPlatform extends JavaPlugin {
@@ -79,7 +97,23 @@ public final class SMPPlatform extends JavaPlugin {
     private OutboxDispatcher outbox;
     private MultiverseWorldAdapter multiverse;
     private volatile Phase3Runtime phase3;
+    private volatile PlatformGuildPointsClient platformGuildPoints;
     private volatile AtriumSubmissionService atriumSubmissions;
+    private volatile PlayerSearchService playerSearch;
+    private volatile AuctionService auctionService;
+    private volatile AuctionIdentityResolver auctionIdentity;
+    private volatile ClientPlayerAdminService clientPlayerAdmin;
+    private volatile ModerationRepository moderationRepository;
+    private final ModerationListener moderationListener = new ModerationListener();
+    private final AdminConfirmations adminConfirmations = new AdminConfirmations();
+    private volatile InventoryAuditRepository inventoryAudit;
+    private volatile ClientWorldAdminService clientWorldAdmin;
+    private final WorldMaintenanceService worldMaintenance = new WorldMaintenanceService();
+    private volatile GuildPointsAdminFacade guildPointsAdmin;
+    private volatile GuildPointsQueryService guildPointsQuery;
+    private volatile HardcoreAdminRepository hardcoreAdmin;
+    private volatile HardcoreResetWindowService hardcoreResetWindow;
+    private final AuctionConfirmations auctionConfirmations = new AuctionConfirmations();
     private AtriumReviewMenu atriumReviewMenu;
     private AtriumShowcaseMenu atriumShowcaseMenu;
     private KairuClientGateway clientGateway;
@@ -132,11 +166,41 @@ public final class SMPPlatform extends JavaPlugin {
     }
 
     private void startDatabaseServicesAsync() {
+        // Control Plane-backed services must not be gated by the optional local JDBC database.
+        if (configuration.core().centralApi().enabled()) {
+            try {
+                auctionService = new AuctionService(configuration.core().centralApi().baseUrl(), resolveCentralApiToken(), configuration.core().serverId());
+                auctionIdentity = new AuctionIdentityResolver();
+                platformGuildPoints = new PlatformGuildPointsClient(configuration.core().centralApi().baseUrl(), resolveCentralApiToken(), configuration.core().serverId());
+                getLogger().info("Auction, Guilds and Points connected through Control Plane API.");
+            } catch (RuntimeException exception) {
+                getLogger().warning("Auction Control Plane client could not start: " + exception.getMessage());
+            }
+        } else {
+            getLogger().warning("Auction disabled: Control Plane API is not enabled.");
+        }
+
         database.start();
-        if (!database.isAvailable()) return;
-        phase3 = Phase3Runtime.start(this, database.requireDataSource(), executors.io(), Clock.systemUTC(), configuration.points().firstJoinReward(), configuration.points().featuredBuildReward(), configuration.guilds());
+        if (!database.isAvailable()) {
+            getLogger().warning("Local PostgreSQL is unavailable; local-only legacy modules are disabled. Control Plane-backed services remain available.");
+            return;
+        }
+        // Guilds and Points are Control Plane-owned. Do not start the legacy JDBC Phase3 runtime.
+        phase3 = null;
         atriumSubmissions = new AtriumSubmissionService(database.requireDataSource(), registry.require("atrium").minecraftWorldName());
-        getLogger().info("Durable guild and points modules are active.");
+        playerSearch = new PlayerSearchService(database.requireDataSource());
+        clientPlayerAdmin = new ClientPlayerAdminService(this);
+        moderationRepository = new ModerationRepository(database.requireDataSource());
+        inventoryAudit = new InventoryAuditRepository(database.requireDataSource());
+        clientWorldAdmin = new ClientWorldAdminService(this);
+        guildPointsAdmin = null;
+        guildPointsQuery = null;
+        hardcoreAdmin = new HardcoreAdminRepository(database.requireDataSource());
+        hardcoreResetWindow = new HardcoreResetWindowService(database.requireDataSource());
+        String hardcorePhysicalWorld = getConfig().getString("hardcore.physical-world","obsidian-gate");
+        getServer().getPluginManager().registerEvents(new HardcoreLifecycleListener(this,database.requireDataSource(),hardcoreAdmin,hardcorePhysicalWorld),this);
+        getServer().getPluginManager().registerEvents(moderationListener, this);
+        getLogger().info("Local Minecraft persistence is active; Guilds and Points remain Control Plane-owned.");
         if (configuration.core().centralApi().enabled() && configuration.integrations().outbox().enabled()) {
             try {
                 String token = resolveCentralApiToken();
@@ -398,12 +462,30 @@ public final class SMPPlatform extends JavaPlugin {
             return true;
         }
         if (name.equals("guild") || name.equals("points")) {
-            Phase3Runtime runtime = phase3;
-            if (runtime == null) {
-                sender.sendMessage("§cDurable gameplay services are unavailable. No mutation was attempted.");
-                return true;
-            }
-            return runtime.execute(sender, name, args);
+            if (!(sender instanceof Player player)) { sender.sendMessage("§cGuilds and points are player services."); return true; }
+            PlatformGuildPointsClient service=platformGuildPoints;
+            if(service==null){sender.sendMessage("§cPlatform services are unavailable. Check the Control Plane connection.");return true;}
+            UUID id=player.getUniqueId();
+            executors.io().execute(() -> {
+                try {
+                    JsonObject result;
+                    if(name.equals("guild")){
+                        if(args.length==0 || args[0].equalsIgnoreCase("info")) result=service.view(id,"guild-summary");
+                        else if(args[0].equalsIgnoreCase("top")) result=service.view(id,"guild-top");
+                        else if(args[0].equalsIgnoreCase("create") && args.length>=3) result=service.createGuild(id,args[1],args[2],args.length>3?String.join(" ",java.util.Arrays.copyOfRange(args,3,args.length)):"");
+                        else if(args[0].equalsIgnoreCase("leave")) result=service.guildAction(id,"guild-leave",null);
+                        else { Bukkit.getScheduler().runTask(this,()->player.sendMessage("§d/guild create <name> <tag> [description] §7| §d/guild top §7| §d/guild leave")); return; }
+                    } else {
+                        String currency=args.length>1?args[1]:"KAIRU_POINTS";
+                        if(args.length==0 || args[0].equalsIgnoreCase("balance")) result=service.view(id,"points-summary");
+                        else if(args[0].equalsIgnoreCase("history")) result=service.pointsView(id,"points-history",currency);
+                        else if(args[0].equalsIgnoreCase("top")) result=service.pointsView(id,"points-top",currency);
+                        else { Bukkit.getScheduler().runTask(this,()->player.sendMessage("§d/points balance [currency] §7| §d/points history [currency] §7| §d/points top [currency]")); return; }
+                    }
+                    Bukkit.getScheduler().runTask(this,()->player.sendMessage("§d"+result.toString()));
+                } catch(Exception e){Bukkit.getScheduler().runTask(this,()->player.sendMessage("§c"+e.getMessage()));}
+            });
+            return true;
         }
         if (name.equals("plotflags")) {
             if (!(sender instanceof org.bukkit.entity.Player player)) { sender.sendMessage("Open plot settings in-game."); return true; }
@@ -612,23 +694,355 @@ public final class SMPPlatform extends JavaPlugin {
     public void openAtriumShowcase(Player player) { if (atriumShowcaseMenu != null) atriumShowcaseMenu.open(player); }
     public void awardFeaturedBuild(UUID submissionId, UUID recipient) { Phase3Runtime runtime = phase3; if (runtime != null) runtime.awardFeaturedBuild(submissionId, recipient); }
     public void clientView(Player player, String view, Consumer<JsonObject> callback) {
-        Phase3Runtime runtime = phase3;
-        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds and points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
-        runtime.clientView(player, view, callback);
+        PlatformGuildPointsClient service=platformGuildPoints;
+        if(service==null){JsonObject x=new JsonObject();x.addProperty("error","Platform services are unavailable. Check the Control Plane connection.");callback.accept(x);return;}
+        executors.io().execute(()->{try{callback.accept(service.view(player.getUniqueId(),view));}catch(Exception e){JsonObject x=new JsonObject();x.addProperty("error",e.getMessage());callback.accept(x);}});
     }
     public void clientGuildAction(Player player, String action, UUID targetId, Consumer<JsonObject> callback) {
-        Phase3Runtime runtime = phase3;
-        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
-        runtime.clientGuildAction(player, action, targetId, callback);
+        PlatformGuildPointsClient service=platformGuildPoints;
+        if(service==null){JsonObject x=new JsonObject();x.addProperty("error","Guilds are unavailable because the Control Plane cannot be reached.");callback.accept(x);return;}
+        executors.io().execute(()->{try{callback.accept(service.guildAction(player.getUniqueId(),action,targetId));}catch(Exception e){JsonObject x=new JsonObject();x.addProperty("error",e.getMessage());callback.accept(x);}});
     }
     public void clientGuildCreate(Player player, String name, String tag, String description, Consumer<JsonObject> callback) {
-        Phase3Runtime runtime = phase3;
-        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Guilds and points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
-        runtime.clientGuildCreate(player, name, tag, description, callback);
+        PlatformGuildPointsClient service=platformGuildPoints;
+        if(service==null){JsonObject x=new JsonObject();x.addProperty("error","Guilds are unavailable because the Control Plane cannot be reached.");callback.accept(x);return;}
+        executors.io().execute(()->{try{callback.accept(service.createGuild(player.getUniqueId(),name,tag,description));}catch(Exception e){JsonObject x=new JsonObject();x.addProperty("error",e.getMessage());callback.accept(x);}});
     }
+    public JsonObject clientPlayerProfile(UUID targetId) {
+        if(clientPlayerAdmin==null){JsonObject out=new JsonObject();out.addProperty("error","Player administration is unavailable.");return out;}
+        return clientPlayerAdmin.profile(targetId);
+    }
+
+    public JsonObject clientHardcoreResetStatus(){return hardcoreResetWindow.status();}
+    public String clientHardcoreResetConfigure(Player actor,String open,String close){
+        if(!actor.hasPermission("smpplatform.admin.hardcore.reset-window")&&!actor.hasPermission("smpplatform.admin.hardcore.*"))
+            throw new SecurityException("Missing permission: smpplatform.admin.hardcore.reset-window");
+        hardcoreResetWindow.configure(java.time.Instant.parse(open),java.time.Instant.parse(close));
+        return "Hardcore reset window updated.";
+    }
+
+    public JsonObject clientHardcoreLookup(UUID target)throws Exception{return hardcoreAdmin.lookup(target);}
+    public String clientHardcoreState(Player actor,UUID target,String state,String reason)throws Exception{
+        String perm="smpplatform.admin.hardcore."+state.toLowerCase(java.util.Locale.ROOT);
+        if(!actor.hasPermission(perm)&&!actor.hasPermission("smpplatform.admin.hardcore.*"))throw new SecurityException("Missing permission: "+perm);
+        if(state.equals("RESET_ELIGIBLE") && !hardcoreResetWindow.isOpen())
+            throw new IllegalStateException("The Hardcore reset window is closed.");
+        JsonObject previous=hardcoreAdmin.lookup(target);
+        String previousState=previous.has("state")?previous.get("state").getAsString():"UNKNOWN";
+        if(state.equals("ALIVE") && !(previousState.equals("DEAD")||previousState.equals("SPECTATING")||previousState.equals("RESET_ELIGIBLE")||previousState.equals("LOCKED")))
+            throw new IllegalStateException("Revival requires a dead, spectating, reset-eligible or locked Hardcore state.");
+        hardcoreAdmin.setState(target,state,actor.getUniqueId(),reason);
+        Player online=Bukkit.getPlayer(target);
+        if(online!=null){
+            if(state.equals("ALIVE")){online.setGameMode(GameMode.SURVIVAL);online.setHealth(Math.min(online.getMaxHealth(),20.0));}
+            else if(state.equals("DEAD")||state.equals("SPECTATING")||state.equals("LOCKED"))online.setGameMode(GameMode.SPECTATOR);
+        }
+        return "Hardcore state set to "+state+".";
+    }
+
+    public JsonObject clientPointHistory(String target,String currency,int limit)throws Exception{if(guildPointsQuery==null)throw new IllegalStateException("Legacy local admin query is disabled; use the Control Plane player points view.");return guildPointsQuery.pointHistory(target,currency,limit);}
+    public JsonObject clientPointLeaderboard(String currency,int limit)throws Exception{if(guildPointsQuery==null)throw new IllegalStateException("Legacy local admin leaderboard is disabled; use the Control Plane points view.");return guildPointsQuery.leaderboard(currency,limit);}
+    public JsonObject clientGuildSearch(String query,int limit)throws Exception{if(guildPointsQuery==null)throw new IllegalStateException("Legacy local guild search is disabled; use the Control Plane guild directory.");return guildPointsQuery.guildSearch(query,limit);}
+
+    public JsonObject clientGuildPointsTarget(UUID target){return guildPointsAdmin.playerSummary(target);}
+    public String clientGuildPointsAdmin(Player actor,String area,String operation,String target,String value,String reason){
+        return guildPointsAdmin.dispatch(actor,area,operation,target,value,reason);
+    }
+
+    public String clientWorldMaintenance(Player actor,String world,boolean enabled){
+        if(Bukkit.getWorld(world)==null)throw new IllegalArgumentException("World is not loaded.");
+        worldMaintenance.set(actor,world,enabled);
+        if(enabled){
+            for(Player p:new java.util.ArrayList<>(Bukkit.getWorld(world).getPlayers()))
+                if(!p.hasPermission("smpplatform.admin.worlds.maintenance.bypass"))
+                    p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
+        }
+        return "Maintenance "+(enabled?"enabled":"disabled")+" for "+world+".";
+    }
+
+    public JsonObject clientWorldAdminSummary(){return clientWorldAdmin.summary();}
+    public String clientWorldAdminAction(Player actor,String world,String action,String argument){
+        return clientWorldAdmin.execute(actor,world,action,argument==null?"":argument);
+    }
+
+    public JsonObject clientInventorySlot(UUID target, boolean ender, int slot){return clientPlayerAdmin.inventorySlot(target,ender,slot);}
+
+    public String clientInventoryEdit(Player actor,UUID target,boolean ender,String edit,int from,Integer to,String fingerprint){
+        String result;
+        if(edit.equals("remove")) result=clientPlayerAdmin.removeInventorySlot(actor,target,ender,from,fingerprint);
+        else if(edit.equals("move")&&to!=null) result=clientPlayerAdmin.moveInventorySlot(actor,target,ender,from,to,fingerprint);
+        else throw new IllegalArgumentException("Unsupported inventory edit.");
+        String type=ender?"ENDER_CHEST":"INVENTORY";
+        executors.io().execute(()->{try{inventoryAudit.record(actor.getUniqueId(),target,type,edit,from,to,fingerprint);}catch(Exception ignored){}});
+        return result;
+    }
+
+    public String clientAdminPrepare(Player actor, UUID target, String action, String argument){
+        adminConfirmations.prepare(actor.getUniqueId(),target,action,argument==null?"":argument);
+        return "Confirm "+action+" within 30 seconds.";
+    }
+
+    public String clientAdminConfirm(Player actor, UUID target, String action){
+        var pending=adminConfirmations.consume(actor.getUniqueId(),target,action);
+        if(pending==null)return "No matching confirmation is active.";
+        if(action.equals("clear-inventory"))return clientPlayerAdminAction(actor,target,"clear-inventory","");
+        if(action.startsWith("inventory-remove:")){
+            String[] parts=action.split(":",4);
+            boolean ender=Boolean.parseBoolean(parts[1]); int slot=Integer.parseInt(parts[2]); String fingerprint=parts[3];
+            return clientInventoryEdit(actor,target,ender,"remove",slot,null,fingerprint);
+        }
+        throw new IllegalArgumentException("Unsupported confirmed action.");
+    }
+
+    public void clientModerationHistory(UUID target, java.util.function.Consumer<JsonObject> callback){
+        executors.io().execute(()->callback.accept(moderationRepository.history(target,50)));
+    }
+
+    public void clientModerate(Player actor, UUID target, String action, String reason, long minutes, java.util.function.Consumer<String> callback){
+        String perm="smpplatform.admin.players."+action;
+        if(!actor.hasPermission(perm) && !actor.hasPermission("smpplatform.admin.players.*")){callback.accept("Missing permission: "+perm);return;}
+        UUID actorId=actor.getUniqueId();
+        java.time.Instant expiry=minutes>0?java.time.Instant.now().plusSeconds(minutes*60):null;
+        Bukkit.getScheduler().runTask(this,()->{
+            try{
+                org.bukkit.OfflinePlayer offline=Bukkit.getOfflinePlayer(target);
+                switch(action){
+                    case "warn" -> { var p=offline.getPlayer(); if(p!=null)p.sendMessage("Staff warning: "+reason); }
+                    case "mute","temp-mute" -> moderationListener.mute(target,expiry);
+                    case "unmute" -> moderationListener.unmute(target);
+                    case "kick" -> { var p=offline.getPlayer(); if(p==null)throw new IllegalStateException("Kick requires the player to be online."); p.kickPlayer(reason); }
+                    case "ban","temp-ban" -> {
+                        java.util.Date expires=expiry==null?null:java.util.Date.from(expiry);
+                        Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(offline.getName(),reason,expires,actor.getName());
+                        var p=offline.getPlayer();if(p!=null)p.kickPlayer(reason);
+                    }
+                    case "unban" -> { if(offline.getName()!=null)Bukkit.getBanList(org.bukkit.BanList.Type.NAME).pardon(offline.getName()); }
+                    default -> throw new IllegalArgumentException("Unsupported moderation action.");
+                }
+                executors.io().execute(()->{
+                    try{moderationRepository.record(target,actorId,action,reason,expiry);
+                        Bukkit.getScheduler().runTask(this,()->callback.accept("Moderation action recorded: "+action+"."));
+                    }catch(Exception e){Bukkit.getScheduler().runTask(this,()->callback.accept("Action applied, but audit persistence failed."));}
+                });
+            }catch(Exception e){callback.accept(e.getMessage()==null?"Moderation action failed.":e.getMessage());}
+        });
+    }
+
+    public JsonObject clientPlayerInventory(UUID targetId, boolean ender) {
+        if(clientPlayerAdmin==null){JsonObject out=new JsonObject();out.addProperty("error","Player administration is unavailable.");return out;}
+        return clientPlayerAdmin.inventory(targetId,ender);
+    }
+
+    public String clientPlayerAdminAction(Player actor, UUID targetId, String action, String argument) {
+        if(clientPlayerAdmin==null) throw new IllegalStateException("Player administration is unavailable.");
+        return clientPlayerAdmin.execute(actor,targetId,action,argument);
+    }
+
+    public String clientAuctionBidPrepare(Player player, String listingId, double amount) {
+        if(amount<1)return "Bid must be at least 1.";
+        auctionConfirmations.put(player.getUniqueId(),"bid",listingId+"|"+amount);
+        return "Bid "+amount+"? Press Confirm Bid within 30 seconds.";
+    }
+
+    public void clientAuctionBidConfirm(Player player, java.util.function.Consumer<String> callback) {
+        var pending=auctionConfirmations.consume(player.getUniqueId(),"bid");
+        if(pending==null){callback.accept("No active bid confirmation.");return;}
+        String[] bits=pending.payload().split("\\|",2);
+        if(bits.length!=2){callback.accept("The saved bid confirmation is invalid. Start the bid again.");return;}
+        UUID listingId;
+        double amount;
+        try{listingId=UUID.fromString(bits[0]);amount=Double.parseDouble(bits[1]);}
+        catch(IllegalArgumentException exception){callback.accept("The saved bid confirmation is invalid. Start the bid again.");return;}
+        UUID playerId=player.getUniqueId();
+        executors.io().execute(()->{
+            com.neonnexus.smpplatform.auction.AuctionService.BidResult result=null;
+            try{
+                UUID bidder=auctionIdentity.minecraftAccountId(playerId);
+                result=auctionService.placeBid(listingId,bidder,amount);
+                var economy=com.neonnexus.smpplatform.auction.AuctionService.economy();
+                Player online=Bukkit.getPlayer(playerId);
+                if(economy==null || online==null){
+                    auctionService.revertBid(listingId,bidder,amount,result.previousBidder(),result.previousBid());
+                    throw new IllegalStateException("Vault economy/player connection is unavailable.");
+                }
+                var withdrawal=economy.withdrawPlayer(online,amount);
+                if(!withdrawal.transactionSuccess()){
+                    auctionService.revertBid(listingId,bidder,amount,result.previousBidder(),result.previousBid());
+                    throw new IllegalStateException("Bid payment failed: "+withdrawal.errorMessage);
+                }
+                Bukkit.getScheduler().runTask(this,()->callback.accept("Bid accepted for "+amount+". Outbid funds are returned through Collect."));
+            }catch(Exception e){Bukkit.getScheduler().runTask(this,()->callback.accept(e.getMessage()));}
+        });
+    }
+
+    public String clientAuctionSellPrepare(Player player, double price) {
+        if(price<1) return "Price must be at least 1.";
+        var held=player.getInventory().getItemInMainHand();
+        if(held==null || held.getType().isAir()) return "Hold the item you want to sell.";
+        String payload=price+"|"+java.util.Base64.getEncoder().encodeToString(held.serializeAsBytes());
+        auctionConfirmations.put(player.getUniqueId(),"sell",payload);
+        return "Sell "+held.getAmount()+"x "+held.getType().getKey().asString()+" for "+price+"? Press Sell again within 30 seconds to confirm.";
+    }
+
+    public void clientAuctionSellConfirm(Player player, java.util.function.Consumer<String> callback) {
+        var pending=auctionConfirmations.consume(player.getUniqueId(),"sell");
+        if(pending==null){callback.accept("No active sell confirmation. Enter a price and press Sell first.");return;}
+        String[] parts=pending.payload().split("\\|",2);
+        if(parts.length!=2){callback.accept("The saved sale confirmation is invalid. Enter the price again.");return;}
+        double price;
+        byte[] expected;
+        try{
+            price=Double.parseDouble(parts[0]);
+            expected=java.util.Base64.getDecoder().decode(parts[1]);
+        }catch(IllegalArgumentException exception){
+            callback.accept("The saved sale confirmation is invalid. Enter the price again.");
+            return;
+        }
+        var current=player.getInventory().getItemInMainHand();
+        if(current==null || current.getType().isAir() || !java.util.Arrays.equals(expected,current.serializeAsBytes())){
+            callback.accept("The held item changed. Sale cancelled."); return;
+        }
+        UUID playerId=player.getUniqueId(); var removed=current.clone();
+        player.getInventory().setItemInMainHand(null);
+        executors.io().execute(() -> {
+            try{
+                UUID account=auctionIdentity.minecraftAccountId(playerId);
+                UUID listing=auctionService.createFixed(account,removed,price,java.time.Instant.now().plus(java.time.Duration.ofHours(48)));
+                Bukkit.getScheduler().runTask(this,()->callback.accept("Listing created: "+listing+"."));
+            }catch(Exception e){
+                Bukkit.getScheduler().runTask(this,()->{
+                    Player online=Bukkit.getPlayer(playerId);
+                    if(online!=null){
+                        var leftovers=online.getInventory().addItem(removed);
+                        leftovers.values().forEach(item->online.getWorld().dropItemNaturally(online.getLocation(),item));
+                    }
+                    callback.accept("Listing failed; your item was returned. "+e.getMessage());
+                });
+            }
+        });
+    }
+
+    public void clientAuctionCancel(Player player, UUID listingId, java.util.function.Consumer<String> callback) {
+        UUID playerId=player.getUniqueId();
+        executors.io().execute(() -> {
+            try{
+                UUID account=auctionIdentity.minecraftAccountId(playerId);
+                JsonObject result=auctionService.cancel(listingId,account);
+                Bukkit.getScheduler().runTask(this,()->callback.accept(result.get("message").getAsString()));
+            }catch(Exception e){Bukkit.getScheduler().runTask(this,()->callback.accept(e.getMessage()));}
+        });
+    }
+
+    public String clientAuctionBuyPrepare(Player player, String listingId) {
+        auctionConfirmations.put(player.getUniqueId(),"buy",listingId);
+        return "Purchase prepared. Press Buy again within 30 seconds to confirm.";
+    }
+
+    public void clientAuctionBuyConfirm(Player player, java.util.function.Consumer<String> callback) {
+        var pending=auctionConfirmations.consume(player.getUniqueId(),"buy");
+        if(pending==null){callback.accept("No active purchase confirmation. Select Buy first.");return;}
+        UUID playerId=player.getUniqueId();
+        executors.io().execute(() -> {
+            com.neonnexus.smpplatform.auction.AuctionService.PurchaseReservation reservation=null;
+            try{
+                UUID buyer=auctionIdentity.minecraftAccountId(playerId);
+                reservation=auctionService.reserveFixedPurchase(UUID.fromString(pending.payload()),buyer);
+                var economy=com.neonnexus.smpplatform.auction.AuctionService.economy();
+                if(economy==null){auctionService.releaseReservation(reservation.listingId()); throw new IllegalStateException("Vault economy is unavailable.");}
+                Player online=Bukkit.getPlayer(playerId);
+                if(online==null){auctionService.releaseReservation(reservation.listingId()); throw new IllegalStateException("You disconnected before the purchase completed.");}
+                var withdrawal=economy.withdrawPlayer(online,reservation.price());
+                if(!withdrawal.transactionSuccess()){auctionService.releaseReservation(reservation.listingId()); throw new IllegalStateException("Payment failed: "+withdrawal.errorMessage);}
+                try{auctionService.completeFixedPurchase(reservation,buyer);}
+                catch(Exception databaseFailure){
+                    economy.depositPlayer(online,reservation.price());
+                    auctionService.releaseReservation(reservation.listingId());
+                    throw databaseFailure;
+                }
+                Bukkit.getScheduler().runTask(this,()->callback.accept("Purchase complete. Use Collect to receive the item."));
+            }catch(Exception e){
+                var reserved=reservation;
+                if(reserved!=null) try{auctionService.releaseReservation(reserved.listingId());}catch(Exception ignored){}
+                Bukkit.getScheduler().runTask(this,()->callback.accept(e.getMessage()));
+            }
+        });
+    }
+
+    public void clientAuctionMine(Player player, java.util.function.Consumer<JsonObject> callback) {
+        executors.io().execute(() -> {
+            try { callback.accept(auctionService.myListings(auctionIdentity.minecraftAccountId(player.getUniqueId()),25)); }
+            catch(Exception e){ JsonObject out=new JsonObject(); out.addProperty("error",e.getMessage()); out.add("auctionListings",new com.google.gson.JsonArray()); callback.accept(out); }
+        });
+    }
+
+    public void clientAuctionCollect(Player player, java.util.function.Consumer<String> callback) {
+        UUID playerId=player.getUniqueId();
+        executors.io().execute(() -> {
+            UUID account=null;
+            try {
+                account=auctionIdentity.minecraftAccountId(playerId);
+                java.util.List<org.bukkit.inventory.ItemStack> items=auctionService.claimPendingItems(account);
+                double money=auctionService.claimPendingMoney(account);
+                UUID finalAccount=account;
+                Bukkit.getScheduler().runTask(this, () -> {
+                    Player online=Bukkit.getPlayer(playerId);
+                    if(online==null){
+                        executors.io().execute(()->{try{auctionService.finishClaims(finalAccount,false);auctionService.finishMoneyClaims(finalAccount,false);}catch(Exception ignored){}});
+                        return;
+                    }
+                    boolean moneyOk=true;
+                    if(money>0){
+                        var economy=com.neonnexus.smpplatform.auction.AuctionService.economy();
+                        if(economy==null) moneyOk=false;
+                        else moneyOk=economy.depositPlayer(online,money).transactionSuccess();
+                    }
+                    for(var item:items){
+                        var leftovers=online.getInventory().addItem(item);
+                        leftovers.values().forEach(left->online.getWorld().dropItemNaturally(online.getLocation(),left));
+                    }
+                    boolean finalMoneyOk=moneyOk;
+                    executors.io().execute(()->{try{auctionService.finishClaims(finalAccount,true);auctionService.finishMoneyClaims(finalAccount,finalMoneyOk);}catch(Exception ignored){}});
+                    callback.accept("Collected "+items.size()+" item delivery(s)"+(money>0?(moneyOk?" and "+money+" in proceeds.":"; money remains pending because Vault payment failed.") : "."));
+                });
+            } catch(Exception e){ Bukkit.getScheduler().runTask(this,()->callback.accept(e.getMessage())); }
+        });
+    }
+
+    public void clientAuctionBrowse(String query, java.util.function.Consumer<JsonObject> callback) {
+        AuctionService auction=auctionService;
+        if(auction==null){ JsonObject unavailable=new JsonObject(); unavailable.addProperty("error","Auction requires the Control Plane API."); unavailable.add("auctionListings",new com.google.gson.JsonArray()); callback.accept(unavailable); return; }
+        executors.io().execute(() -> callback.accept(auction.browse(query,25)));
+    }
+
+    public void clientPlayerSearch(String query, String filter, java.util.function.Consumer<JsonObject> callback) {
+        PlayerSearchService search = playerSearch;
+        if (search == null) {
+            JsonObject unavailable = new JsonObject();
+            unavailable.addProperty("error", "Player search requires a healthy PostgreSQL connection.");
+            unavailable.add("searchResults", new com.google.gson.JsonArray());
+            callback.accept(unavailable);
+            return;
+        }
+        executors.io().execute(() -> callback.accept(search.search(query, filter, 25)));
+    }
+
     public void clientPointsView(Player player, String view, String currency, Consumer<JsonObject> callback) {
-        Phase3Runtime runtime = phase3;
-        if (runtime == null) { JsonObject unavailable = new JsonObject(); unavailable.addProperty("error", "Points require a healthy PostgreSQL connection."); callback.accept(unavailable); return; }
-        runtime.clientPointsView(player, view, currency, callback);
+        PlatformGuildPointsClient service=platformGuildPoints;
+        if(service==null){JsonObject x=new JsonObject();x.addProperty("error","Points are unavailable because the Control Plane cannot be reached.");callback.accept(x);return;}
+        executors.io().execute(()->{try{callback.accept(service.pointsView(player.getUniqueId(),view,currency));}catch(Exception e){JsonObject x=new JsonObject();x.addProperty("error",e.getMessage());callback.accept(x);}});
     }
+
+    public JsonObject clientAuctionDatabaseStatus(Player actor) {
+        if (!actor.hasPermission("smpplatform.auction.browse") && !actor.hasPermission("smpplatform.auction.admin"))
+            throw new SecurityException("You do not have permission to inspect the auction.");
+        if (auctionService == null) {
+            JsonObject out=new JsonObject();
+            out.addProperty("connected",false);
+            out.addProperty("schemaReady",false);
+            out.addProperty("error","Auction service is not active because the Control Plane API is unavailable.");
+            return out;
+        }
+        return auctionService.databaseStatus();
+    }
+
 }

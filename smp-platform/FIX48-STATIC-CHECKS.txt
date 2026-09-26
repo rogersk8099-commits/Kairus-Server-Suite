@@ -1,0 +1,5 @@
+PASS: Guild page stripped of unrelated admin controls
+PASS: Auction uses PostgreSQL DataSource
+PASS: Auction DB status route present
+PASS: Auction client DB indicator present
+PASS: Auction migrations present

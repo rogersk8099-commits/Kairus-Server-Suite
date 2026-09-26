@@ -271,7 +271,16 @@ export class PostgresStore implements ControlPlaneStore {
     }
     if (operation === "mine") {
       const minecraftUuid=uuid("minecraftUuid"); await requireLinked(minecraftUuid);
-      const { rows } = await this.pool.query("SELECT * FROM auction_listings WHERE seller_minecraft_uuid=$1 ORDER BY created_at DESC LIMIT 100", [minecraftUuid]);
+      const { rows } = await this.pool.query("SELECT * FROM auction_listings WHERE seller_minecraft_uuid=$1 AND status IN ('ACTIVE','RESERVED') AND expires_at>NOW() ORDER BY created_at DESC LIMIT 100", [minecraftUuid]);
+      return { auctionListings: rows.map(listingProjection) };
+    }
+    if (operation === "my-bids") {
+      const minecraftUuid=uuid("minecraftUuid"); await requireLinked(minecraftUuid);
+      const { rows } = await this.pool.query(
+        `SELECT DISTINCT ON (l.id) l.* FROM auction_listings l
+         JOIN auction_bids b ON b.listing_id=l.id
+         WHERE b.bidder_minecraft_uuid=$1 AND l.status IN ('ACTIVE','RESERVED') AND l.expires_at>NOW()
+         ORDER BY l.id,b.created_at DESC LIMIT 100`, [minecraftUuid]);
       return { auctionListings: rows.map(listingProjection) };
     }
     if (operation === "create-fixed") {

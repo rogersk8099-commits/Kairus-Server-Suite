@@ -16,7 +16,7 @@ import java.util.Objects;
 
 /** Loads all declared configuration files. Missing or malformed operational config aborts enable safely. */
 public final class PlatformConfigurationLoader {
-    private static final List<String> REQUIRED_FILES = List.of("config.yml", "worlds.yml", "guilds.yml", "points.yml", "hardcore.yml", "events.yml", "gui.yml", "messages.yml", "integrations.yml");
+    private static final List<String> REQUIRED_FILES = List.of("config.yml", "worlds.yml", "guilds.yml", "points.yml", "hardcore.yml", "events.yml", "gui.yml", "messages.yml", "integrations.yml", "permissions.yml", "search.yml", "auction.yml");
     private final JavaPlugin plugin;
 
     public PlatformConfigurationLoader(JavaPlugin plugin) { this.plugin = Objects.requireNonNull(plugin); }

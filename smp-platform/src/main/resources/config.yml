@@ -43,3 +43,8 @@ commands:
 logging:
   redact-fields: [authorization, token, secret, password, access_token, refresh_token]
   log-player-ip-addresses: false
+
+hardcore:
+  physical-world: obsidian-gate
+season:
+  current: CURRENT

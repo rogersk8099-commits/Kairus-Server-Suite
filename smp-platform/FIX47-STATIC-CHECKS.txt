@@ -1,0 +1,8 @@
+PASS: Vault API compile dependency added
+PASS: GameMode import added
+PASS: 4-argument gateway reply overload added
+PASS: KairuControlBridge sendAction added
+PASS: obsolete KairuClientBridge references removed
+PASS: Material3 references removed from Kairu Kotlin
+FAIL: all state identifiers from client log declared
+Missing state identifiers: inventoryCells

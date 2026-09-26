@@ -3,7 +3,7 @@ version: ${version}
 main: com.neonnexus.smpplatform.SMPPlatform
 api-version: '26.2'
 author: Kairu SMP
-description: Unified Kairu world, guild, points, lifecycle, events, creative, administration and integration platform.
+description: Unified Kairu world, guild, points, auction, search, lifecycle, events, creative, administration and integration platform.
 softdepend:
   - Multiverse-Core
   - Multiverse-Inventories
@@ -27,6 +27,15 @@ commands:
   points:
     description: Point balances, history, leaderboards and audited administration.
     permission: smpplatform.points.view
+  auction:
+    aliases: [ah]
+    description: Player auction house.
+    usage: /auction [browse|sell|listings|bids|cancel|collect]
+    permission: smpplatform.auction.browse
+  search:
+    description: Search public Kairu player and platform records.
+    usage: /search <query>
+    permission: smpplatform.search.use
   kairu:
     description: Link your Minecraft account to Discord using a one-time code.
     usage: /kairu link <code>
@@ -56,6 +65,20 @@ commands:
     description: Opens the player-readable Atrium plot settings guide.
     permission: smpplatform.creative.use
 permissions:
+  smpplatform.play: {default: true}
+  smpplatform.points.earn: {default: true}
+  smpplatform.points.history: {default: true}
+  smpplatform.points.top: {default: true}
+  smpplatform.search.use: {default: true}
+  smpplatform.search.see-hidden: {default: op}
+  smpplatform.search.admin: {default: op}
+  smpplatform.auction.browse: {default: true}
+  smpplatform.auction.create: {default: false}
+  smpplatform.auction.bid: {default: false}
+  smpplatform.auction.buy: {default: false}
+  smpplatform.auction.cancel: {default: false}
+  smpplatform.auction.remove: {default: op}
+  smpplatform.auction.admin: {default: op}
   smpplatform.worlds: {default: true}
   smpplatform.world.spawn-hub: {default: true}
   smpplatform.guild.use: {default: true}

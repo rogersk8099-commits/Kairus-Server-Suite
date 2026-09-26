@@ -1,0 +1,17 @@
+config-version: 1
+auction:
+  enabled: true
+  currency: VAULT
+  aliases: [ah]
+  listing-types: [FIXED_PRICE, AUCTION]
+  default-duration-hours: 48
+  minimum-price: 1
+  listing-fee-percent: 2
+  sale-tax-percent: 5
+  limits: {default: 0, member: 3, trusted: 8, moderator: 10, admin: -1, owner: -1}
+  blocked-materials: [COMMAND_BLOCK, CHAIN_COMMAND_BLOCK, REPEATING_COMMAND_BLOCK, STRUCTURE_BLOCK, STRUCTURE_VOID, BARRIER, DEBUG_STICK]
+  safety: {atomic-transactions: true, prevent-self-purchase: true, preserve-item-components: true, durable-delivery: true, audit-staff-removals: true}
+  search:
+    page-size: 25
+    max-page-size: 100
+    sort-options: [NEWEST, OLDEST, PRICE_LOW_HIGH, PRICE_HIGH_LOW, ENDING_SOON, MOST_BIDS]

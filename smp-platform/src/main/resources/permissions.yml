@@ -1,0 +1,118 @@
+config-version: 1
+groups:
+  default:
+    weight: 10
+    parents: []
+    permissions: [smpplatform.play, kairubridge.receive, minecraft.command.help, minecraft.command.msg]
+  member:
+    weight: 20
+    parents: [default]
+    permissions: [smpplatform.points.view, smpplatform.points.history, smpplatform.points.top, smpplatform.auction.browse, smpplatform.auction.buy, smpplatform.auction.cancel, smpplatform.search.use, essentials.home, essentials.tpa]
+  trusted:
+    weight: 30
+    parents: [member]
+    permissions: [smpplatform.auction.create, smpplatform.auction.bid, essentials.warp]
+  moderator:
+    weight: 40
+    parents: [trusted]
+    permissions: [smpplatform.admin.audit, smpplatform.auction.remove, smpplatform.search.see-hidden, essentials.kick, essentials.mute]
+  admin:
+    weight: 50
+    parents: [moderator]
+    permissions: [smpplatform.*, kairubridge.admin, luckperms.*]
+  owner:
+    weight: 60
+    parents: [admin]
+    permissions: []
+setup:
+  preserve-unmanaged-permissions: true
+  preserve-unmanaged-inheritance: true
+  preview-required-for-destructive-changes: true
+  audit-changes: true
+
+# fix32 granular player administration
+player-admin:
+  permissions:
+    - smpplatform.admin.players.teleport
+    - smpplatform.admin.players.bring
+    - smpplatform.admin.players.spawn
+    - smpplatform.admin.players.world
+    - smpplatform.admin.players.gamemode
+    - smpplatform.admin.players.heal
+    - smpplatform.admin.players.feed
+    - smpplatform.admin.players.clear-effects
+    - smpplatform.admin.players.kick
+
+# fix33 extended player administration
+extended-player-admin:
+  permissions:
+    - smpplatform.admin.players.health
+    - smpplatform.admin.players.hunger
+    - smpplatform.admin.players.xp-level
+    - smpplatform.admin.players.freeze
+    - smpplatform.admin.players.unfreeze
+    - smpplatform.admin.players.inventory
+    - smpplatform.admin.players.enderchest
+    - smpplatform.admin.players.clear-inventory
+
+moderation:
+  permissions:
+    - smpplatform.admin.players.moderation
+    - smpplatform.admin.players.warn
+    - smpplatform.admin.players.mute
+    - smpplatform.admin.players.temp-mute
+    - smpplatform.admin.players.unmute
+    - smpplatform.admin.players.kick
+    - smpplatform.admin.players.ban
+    - smpplatform.admin.players.temp-ban
+    - smpplatform.admin.players.unban
+
+inventory-edit:
+  permissions:
+    - smpplatform.admin.players.inventory.edit
+    - smpplatform.admin.players.enderchest.edit
+
+world-admin:
+  permissions:
+    - smpplatform.admin.worlds.difficulty
+    - smpplatform.admin.worlds.pvp
+    - smpplatform.admin.worlds.time
+    - smpplatform.admin.worlds.weather-clear
+    - smpplatform.admin.worlds.weather-rain
+    - smpplatform.admin.worlds.weather-thunder
+    - smpplatform.admin.worlds.set-spawn
+    - smpplatform.admin.worlds.border
+    - smpplatform.admin.worlds.save
+
+world-admin-extended:
+  permissions:
+    - smpplatform.admin.worlds.gamerule
+    - smpplatform.admin.worlds.clear-items
+    - smpplatform.admin.worlds.clear-mobs
+    - smpplatform.admin.worlds.announce
+    - smpplatform.admin.worlds.maintenance
+    - smpplatform.admin.worlds.maintenance.bypass
+
+guild-points-admin:
+  permissions:
+    - smpplatform.admin.points.add
+    - smpplatform.admin.points.remove
+    - smpplatform.admin.points.set
+    - smpplatform.admin.points.inspect
+    - smpplatform.admin.guilds.info
+    - smpplatform.admin.guilds.disband
+    - smpplatform.admin.guilds.set-rank
+    - smpplatform.admin.guilds.remove-member
+
+hardcore-admin:
+  permissions:
+    - smpplatform.admin.hardcore
+    - smpplatform.admin.hardcore.alive
+    - smpplatform.admin.hardcore.dead
+    - smpplatform.admin.hardcore.spectating
+    - smpplatform.admin.hardcore.reset_eligible
+    - smpplatform.admin.hardcore.locked
+
+hardcore-reset-window:
+  permissions:
+    - smpplatform.admin.hardcore.reset-window

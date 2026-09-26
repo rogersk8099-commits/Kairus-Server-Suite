@@ -1,0 +1,3 @@
+PASS: server malformed opening text blocks
+FAIL: client material3 refs
+PASS: client kairuField refs

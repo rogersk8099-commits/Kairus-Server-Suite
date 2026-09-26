@@ -92,7 +92,7 @@ const guildPointsRpcSchema = z.object({
   payload: z.record(z.string(), z.unknown()).default({})
 }).strict();
 
-const auctionOperation = z.enum(["status","browse","mine","create-fixed","cancel","reserve-purchase","release-purchase","complete-purchase","place-bid","revert-bid","claim","finish-claim"]);
+const auctionOperation = z.enum(["status","browse","mine","my-bids","create-fixed","cancel","reserve-purchase","release-purchase","complete-purchase","place-bid","revert-bid","claim","finish-claim"]);
 const auctionRpcSchema = z.object({
   operation: auctionOperation,
   payload: z.record(z.string(), z.unknown()).default({})

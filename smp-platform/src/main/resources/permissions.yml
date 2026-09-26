@@ -1,0 +1,57 @@
+# Managed LuckPerms baseline for /smpadmin setup.
+# Setup must be idempotent: add/repair these nodes but never erase unrelated staff customisations.
+config-version: 1
+groups:
+  default:
+    weight: 10
+    parents: []
+    permissions:
+      - smpplatform.play
+      - kairubridge.receive
+      - minecraft.command.help
+      - minecraft.command.msg
+  member:
+    weight: 20
+    parents: [default]
+    permissions:
+      - smpplatform.points.view
+      - smpplatform.points.history
+      - smpplatform.points.top
+      - smpplatform.auction.browse
+      - smpplatform.auction.buy
+      - smpplatform.auction.cancel
+      - smpplatform.search.use
+      - essentials.home
+      - essentials.tpa
+  trusted:
+    weight: 30
+    parents: [member]
+    permissions:
+      - smpplatform.auction.create
+      - smpplatform.auction.bid
+      - essentials.warp
+  moderator:
+    weight: 40
+    parents: [trusted]
+    permissions:
+      - smpplatform.admin.audit
+      - smpplatform.auction.remove
+      - smpplatform.search.see-hidden
+      - essentials.kick
+      - essentials.mute
+  admin:
+    weight: 50
+    parents: [moderator]
+    permissions:
+      - smpplatform.*
+      - kairubridge.admin
+      - luckperms.*
+  owner:
+    weight: 60
+    parents: [admin]
+    permissions: []
+setup:
+  preserve-unmanaged-permissions: true
+  preserve-unmanaged-inheritance: true
+  preview-required-for-destructive-changes: true
+  audit-changes: true

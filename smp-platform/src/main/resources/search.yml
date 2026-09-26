@@ -1,0 +1,21 @@
+config-version: 1
+search:
+  enabled: true
+  minimum-query-length: 2
+  page-size: 25
+  max-page-size: 100
+  case-insensitive: true
+  player-fields: [USERNAME, UUID, PLATFORM_USER_ID]
+  include-online: true
+  include-offline: true
+  include-recent: true
+  platform-types: [JAVA, BEDROCK]
+  security:
+    public-permission: smpplatform.search.use
+    hidden-permission: smpplatform.search.see-hidden
+    admin-permission: smpplatform.search.admin
+    never-return: [IP_ADDRESS, EMAIL, OAUTH_SECRET, PRIVATE_DISCORD_DATA, STAFF_NOTES, MODERATION_EVIDENCE]
+  database:
+    require-prepared-statements: true
+    require-indexed-normalized-usernames: true
+    unbounded-like-queries: false

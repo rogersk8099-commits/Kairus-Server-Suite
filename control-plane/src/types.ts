@@ -198,4 +198,6 @@ export interface ControlPlaneStore {
   queueChatMessage(message: NewChatQueueMessage): Promise<{ message: ChatQueueMessage; created: boolean }>;
   /** Server-authenticated auction RPC. PostgreSQL is authoritative in production. */
   auctionRequest(operation: string, payload: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** Guild and points are shared platform services owned by the Control Plane. */
+  guildPointsRequest(operation: string, payload: Record<string, unknown>): Promise<Record<string, unknown>>;
 }

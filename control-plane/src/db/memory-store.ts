@@ -207,4 +207,12 @@ export class MemoryStore implements ControlPlaneStore {
     if (operation === "browse" || operation === "mine") return { auctionListings: [], error: "Auction requires PostgreSQL storage." };
     throw new Error("Auction mutations require PostgreSQL storage");
   }
+
+  async guildPointsRequest(operation: string, _payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (["guild-summary","guild-top","guild-invites","points-summary","points-history","points-top"].includes(operation)) {
+      return operation.startsWith("points") ? { balances: [], history: [], leaderboard: [], error: "Guilds and points require PostgreSQL storage." }
+        : { inGuild: false, leaderboard: [], invites: [], creationCurrency: "KAIRU_POINTS", creationCost: 500, error: "Guilds and points require PostgreSQL storage." };
+    }
+    throw new Error("Guild and points mutations require PostgreSQL storage");
+  }
 }

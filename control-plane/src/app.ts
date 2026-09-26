@@ -82,6 +82,16 @@ const bridgeEventSchema = z.object({
   details: detailsSchema.optional()
 }).strict();
 
+
+const guildPointsOperation = z.enum([
+  "guild-summary","guild-top","guild-invites","guild-create","guild-action",
+  "points-summary","points-history","points-top","points-adjust"
+]);
+const guildPointsRpcSchema = z.object({
+  operation: guildPointsOperation,
+  payload: z.record(z.string(), z.unknown()).default({})
+}).strict();
+
 const auctionOperation = z.enum(["status","browse","mine","create-fixed","cancel","reserve-purchase","release-purchase","complete-purchase","place-bid","revert-bid","claim","finish-claim"]);
 const auctionRpcSchema = z.object({
   operation: auctionOperation,
@@ -272,6 +282,13 @@ export function buildApp(config: AppConfig, store: ControlPlaneStore, authStore?
     return centralWorldRegistry;
   });
 
+
+
+  app.post("/api/plugin/guild-points", { config: { rateLimit: { max: 240, timeWindow: "1 minute" } } }, async (request) => {
+    requirePlugin(request, config);
+    const body = guildPointsRpcSchema.parse(request.body);
+    return { result: await store.guildPointsRequest(body.operation, body.payload) };
+  });
 
   app.post("/api/plugin/auction", { config: { rateLimit: { max: 180, timeWindow: "1 minute" } } }, async (request) => {
     requirePlugin(request, config);

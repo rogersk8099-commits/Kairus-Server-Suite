@@ -233,4 +233,152 @@ export class PostgresStore implements ControlPlaneStore {
     return { message: chatMessageFrom(existing.rows[0]), created: false };
   }
 
+
+  async auctionRequest(operation: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const uuid = (name: string) => {
+      const value = String(payload[name] ?? "");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) throw new Error(`${name} must be a UUID`);
+      return value;
+    };
+    const amount = (name: string) => {
+      const value = Number(payload[name]);
+      if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be a non-negative number`);
+      return value;
+    };
+    const requireLinked = async (minecraftUuid: string) => {
+      const linked = await this.pool.query("SELECT 1 FROM player_links WHERE minecraft_uuid=$1 LIMIT 1", [minecraftUuid]);
+      if (!linked.rowCount) throw new Error("This Minecraft account is not linked to the platform.");
+    };
+    const listingProjection = (row: DbRow) => ({
+      id: String(row.id), itemName: String(row.item_name), quantity: Number(row.quantity),
+      type: String(row.listing_type), price: Number(row.buy_now_price ?? row.current_bid ?? row.starting_price),
+      status: String(row.status), expiresAt: timestamp(row.expires_at)
+    });
+
+    if (operation === "status") {
+      const { rows } = await this.pool.query("SELECT to_regclass('public.auction_listings') listings, to_regclass('public.auction_bids') bids, to_regclass('public.auction_deliveries') deliveries");
+      const ready = Boolean(rows[0]?.listings && rows[0]?.bids && rows[0]?.deliveries);
+      return { connected: true, schemaReady: ready, service: "control-plane", storage: "postgres" };
+    }
+    if (operation === "browse") {
+      const query = String(payload.query ?? "").trim().toLowerCase();
+      const limit = Math.max(1, Math.min(Number(payload.limit ?? 25), 100));
+      const { rows } = await this.pool.query(
+        `SELECT * FROM auction_listings WHERE status='ACTIVE' AND expires_at>NOW()
+         AND ($1='' OR lower(item_name) LIKE $2) ORDER BY created_at DESC LIMIT $3`,
+        [query, `%${query}%`, limit]);
+      return { auctionListings: rows.map(listingProjection) };
+    }
+    if (operation === "mine") {
+      const minecraftUuid=uuid("minecraftUuid"); await requireLinked(minecraftUuid);
+      const { rows } = await this.pool.query("SELECT * FROM auction_listings WHERE seller_minecraft_uuid=$1 ORDER BY created_at DESC LIMIT 100", [minecraftUuid]);
+      return { auctionListings: rows.map(listingProjection) };
+    }
+    if (operation === "create-fixed") {
+      const minecraftUuid=uuid("minecraftUuid"); await requireLinked(minecraftUuid);
+      const id=randomUUID(); const price=amount("price");
+      const itemPayload=String(payload.itemPayload ?? ""); const itemName=String(payload.itemName ?? "").slice(0,160);
+      const quantity=Math.max(1,Math.min(Number(payload.quantity ?? 1),64));
+      const expiresAt=new Date(String(payload.expiresAt ?? ""));
+      if (!itemPayload || !itemName || !Number.isFinite(expiresAt.getTime()) || price < 1) throw new Error("Invalid auction listing");
+      await this.pool.query(`INSERT INTO auction_listings
+        (id,seller_minecraft_uuid,item_payload,item_name,quantity,listing_type,starting_price,buy_now_price,status,expires_at)
+        VALUES($1,$2,$3,$4,$5,'FIXED',$6,$6,'ACTIVE',$7)`,
+        [id,minecraftUuid,itemPayload,itemName,quantity,price,expiresAt.toISOString()]);
+      return { id };
+    }
+    if (operation === "cancel") {
+      const minecraftUuid=uuid("minecraftUuid"), listingId=uuid("listingId"); await requireLinked(minecraftUuid);
+      const client=await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const found=await client.query("SELECT item_payload,status FROM auction_listings WHERE id=$1 AND seller_minecraft_uuid=$2 FOR UPDATE",[listingId,minecraftUuid]);
+        if(!found.rowCount || found.rows[0].status!=="ACTIVE") throw new Error("Listing is not active or does not belong to you.");
+        await client.query("UPDATE auction_listings SET status='CANCELLED',version=version+1 WHERE id=$1",[listingId]);
+        await client.query("INSERT INTO auction_deliveries(id,minecraft_uuid,listing_id,delivery_type,item_payload,status) VALUES($1,$2,$3,'ITEM',$4,'PENDING')",[randomUUID(),minecraftUuid,listingId,found.rows[0].item_payload]);
+        await client.query("COMMIT"); return { message:"Listing cancelled. Use Collect to receive the item." };
+      } catch(e){ await client.query("ROLLBACK"); throw e; } finally { client.release(); }
+    }
+    if (operation === "reserve-purchase") {
+      const buyer=uuid("minecraftUuid"), listingId=uuid("listingId"); await requireLinked(buyer);
+      const client=await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const r=await client.query("SELECT * FROM auction_listings WHERE id=$1 FOR UPDATE",[listingId]);
+        const row=r.rows[0]; if(!row || row.status!=="ACTIVE" || row.listing_type!=="FIXED") throw new Error("Listing is not available.");
+        if(String(row.seller_minecraft_uuid)===buyer) throw new Error("You cannot buy your own listing.");
+        await client.query("UPDATE auction_listings SET status='RESERVED',version=version+1 WHERE id=$1",[listingId]);
+        await client.query("COMMIT");
+        return { listingId, sellerMinecraftUuid:String(row.seller_minecraft_uuid), itemPayload:String(row.item_payload), price:Number(row.buy_now_price) };
+      } catch(e){await client.query("ROLLBACK");throw e;} finally{client.release();}
+    }
+    if (operation === "release-purchase") {
+      const listingId=uuid("listingId");
+      await this.pool.query("UPDATE auction_listings SET status='ACTIVE',version=version+1 WHERE id=$1 AND status='RESERVED'",[listingId]);
+      return { released:true };
+    }
+    if (operation === "complete-purchase") {
+      const buyer=uuid("minecraftUuid"), listingId=uuid("listingId"); await requireLinked(buyer);
+      const client=await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const r=await client.query("SELECT seller_minecraft_uuid,item_payload,buy_now_price,status FROM auction_listings WHERE id=$1 FOR UPDATE",[listingId]);
+        const row=r.rows[0]; if(!row || row.status!=="RESERVED") throw new Error("Purchase reservation is no longer active.");
+        await client.query("UPDATE auction_listings SET status='SOLD',sold_at=NOW(),version=version+1 WHERE id=$1",[listingId]);
+        await client.query("INSERT INTO auction_deliveries(id,minecraft_uuid,listing_id,delivery_type,item_payload,status) VALUES($1,$2,$3,'ITEM',$4,'PENDING')",[randomUUID(),buyer,listingId,row.item_payload]);
+        await client.query("INSERT INTO auction_deliveries(id,minecraft_uuid,listing_id,delivery_type,money_amount,status) VALUES($1,$2,$3,'MONEY',$4,'PENDING')",[randomUUID(),row.seller_minecraft_uuid,listingId,row.buy_now_price]);
+        await client.query("COMMIT"); return { completed:true };
+      } catch(e){await client.query("ROLLBACK");throw e;} finally{client.release();}
+    }
+    if (operation === "place-bid") {
+      const bidder=uuid("minecraftUuid"), listingId=uuid("listingId"), bid=amount("amount"); await requireLinked(bidder);
+      const client=await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const r=await client.query("SELECT * FROM auction_listings WHERE id=$1 FOR UPDATE",[listingId]); const row=r.rows[0];
+        if(!row || row.status!=="ACTIVE") throw new Error("Listing is not active.");
+        if(String(row.seller_minecraft_uuid)===bidder) throw new Error("You cannot bid on your own listing.");
+        const minimum=Math.max(Number(row.starting_price),Number(row.current_bid??0)+1); if(bid<minimum) throw new Error(`Minimum bid is ${minimum}.`);
+        const previousBidder=row.current_bidder_minecraft_uuid?String(row.current_bidder_minecraft_uuid):null;
+        const previousBid=Number(row.current_bid??0);
+        await client.query("UPDATE auction_listings SET current_bid=$2,current_bidder_minecraft_uuid=$3,version=version+1 WHERE id=$1",[listingId,bid,bidder]);
+        await client.query("INSERT INTO auction_bids(id,listing_id,bidder_minecraft_uuid,amount,status) VALUES($1,$2,$3,$4,'ACTIVE')",[randomUUID(),listingId,bidder,bid]);
+        if(previousBidder && previousBid>0) await client.query("INSERT INTO auction_deliveries(id,minecraft_uuid,listing_id,delivery_type,money_amount,status) VALUES($1,$2,$3,'MONEY',$4,'PENDING')",[randomUUID(),previousBidder,listingId,previousBid]);
+        await client.query("COMMIT"); return { previousBidder, previousBid };
+      }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
+    }
+    if (operation === "revert-bid") {
+      const bidder=uuid("minecraftUuid"), listingId=uuid("listingId"); const bid=amount("amount");
+      const previousBidder=payload.previousBidder ? String(payload.previousBidder) : null; const previousBid=Number(payload.previousBid ?? 0);
+      const client=await this.pool.connect();
+      try{
+        await client.query("BEGIN");
+        const current=await client.query("SELECT current_bid,current_bidder_minecraft_uuid FROM auction_listings WHERE id=$1 FOR UPDATE",[listingId]);
+        const row=current.rows[0];
+        if(row && String(row.current_bidder_minecraft_uuid)===bidder && Number(row.current_bid)===bid){
+          await client.query("UPDATE auction_listings SET current_bid=$2,current_bidder_minecraft_uuid=$3,version=version+1 WHERE id=$1",[listingId,previousBid>0?previousBid:null,previousBidder]);
+          await client.query("UPDATE auction_bids SET status='REVERTED' WHERE listing_id=$1 AND bidder_minecraft_uuid=$2 AND amount=$3 AND status='ACTIVE'",[listingId,bidder,bid]);
+          if(previousBidder && previousBid>0) await client.query("DELETE FROM auction_deliveries WHERE listing_id=$1 AND minecraft_uuid=$2 AND delivery_type='MONEY' AND money_amount=$3 AND status='PENDING'",[listingId,previousBidder,previousBid]);
+        }
+        await client.query("COMMIT"); return { reverted:true };
+      }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
+    }
+    if (operation === "claim") {
+      const minecraftUuid=uuid("minecraftUuid"); await requireLinked(minecraftUuid);
+      const client=await this.pool.connect();
+      try{
+        await client.query("BEGIN");
+        const r=await client.query("SELECT id,delivery_type,item_payload,money_amount FROM auction_deliveries WHERE minecraft_uuid=$1 AND status='PENDING' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 54",[minecraftUuid]);
+        const ids=r.rows.map((x)=>x.id); if(ids.length) await client.query("UPDATE auction_deliveries SET status='CLAIMING' WHERE id=ANY($1::uuid[])",[ids]);
+        await client.query("COMMIT");
+        return { claimIds:ids.map(String), items:r.rows.filter(x=>x.delivery_type==="ITEM").map(x=>String(x.item_payload)), money:r.rows.filter(x=>x.delivery_type==="MONEY").reduce((n,x)=>n+Number(x.money_amount??0),0) };
+      }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
+    }
+    if (operation === "finish-claim") {
+      const minecraftUuid=uuid("minecraftUuid"); const delivered=Boolean(payload.delivered);
+      await this.pool.query("UPDATE auction_deliveries SET status=$2,claimed_at=CASE WHEN $2='DELIVERED' THEN NOW() ELSE NULL END WHERE minecraft_uuid=$1 AND status='CLAIMING'",[minecraftUuid,delivered?"DELIVERED":"PENDING"]);
+      return { finished:true };
+    }
+    throw new Error(`Unsupported auction operation: ${operation}`);
+  }
 }

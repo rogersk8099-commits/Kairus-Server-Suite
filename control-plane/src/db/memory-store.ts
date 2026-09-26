@@ -201,4 +201,10 @@ export class MemoryStore implements ControlPlaneStore {
     return { message: { ...record }, created: true };
   }
 
+
+  async auctionRequest(operation: string, _payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (operation === "status") return { connected: false, schemaReady: false, service: "control-plane", storage: "memory", error: "Auction requires PostgreSQL storage." };
+    if (operation === "browse" || operation === "mine") return { auctionListings: [], error: "Auction requires PostgreSQL storage." };
+    throw new Error("Auction mutations require PostgreSQL storage");
+  }
 }

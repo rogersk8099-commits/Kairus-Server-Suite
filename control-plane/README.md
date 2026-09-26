@@ -221,3 +221,21 @@ This repository is the control plane only. The Paper/Purpur plugin remains respo
 [2]: https://fastify.dev/docs/latest/ "Fastify documentation"
 [3]: https://discord.js.org/ "discord.js documentation"
 [4]: https://docs.railway.com/ "Railway documentation"
+
+
+## Auction ownership
+
+Auction persistence is owned by the Control Plane. Minecraft does **not** need a direct
+PostgreSQL connection for auction listings, bids, or deliveries.
+
+Production flow:
+
+`Kairu Client -> SMPPlatform -> Control Plane /api/plugin/auction -> PostgreSQL`
+
+Required Railway variables remain `DATABASE_URL` and `PLUGIN_API_KEY`. SMPPlatform must use
+the same `PLUGIN_API_KEY` as `SMPPLATFORM_API_TOKEN` and its central API base URL must point
+at this Control Plane service. Run `npm run migrate` after deployment so
+`008_auction_platform.sql` creates the auction tables.
+
+The plugin endpoint requires both `Authorization: Bearer <PLUGIN_API_KEY>` and
+`X-Kairu-Server-Id`.

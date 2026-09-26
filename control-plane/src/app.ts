@@ -81,6 +81,13 @@ const bridgeEventSchema = z.object({
   content: z.string().trim().max(500).refine((value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(value), "content contains prohibited control characters"),
   details: detailsSchema.optional()
 }).strict();
+
+const auctionOperation = z.enum(["status","browse","mine","create-fixed","cancel","reserve-purchase","release-purchase","complete-purchase","place-bid","revert-bid","claim","finish-claim"]);
+const auctionRpcSchema = z.object({
+  operation: auctionOperation,
+  payload: z.record(z.string(), z.unknown()).default({})
+}).strict();
+
 const chatLimitSchema = z.coerce.number().int().min(1).max(50).default(20);
 const chatAckSchema = z.object({
   status: z.enum(["delivered", "rejected"]),
@@ -263,6 +270,13 @@ export function buildApp(config: AppConfig, store: ControlPlaneStore, authStore?
     // plugin bearer secret while keeping heartbeat/command routes server-scoped.
     if (!config.pluginApiKey || !safeSecretEquals(getBearerToken(request.headers.authorization), config.pluginApiKey)) throw new AppError(401, "UNAUTHORIZED", "Invalid plugin credentials");
     return centralWorldRegistry;
+  });
+
+
+  app.post("/api/plugin/auction", { config: { rateLimit: { max: 180, timeWindow: "1 minute" } } }, async (request) => {
+    requirePlugin(request, config);
+    const body = auctionRpcSchema.parse(request.body);
+    return { auction: await store.auctionRequest(body.operation, body.payload) };
   });
 
   app.get("/api/server/status", async () => {

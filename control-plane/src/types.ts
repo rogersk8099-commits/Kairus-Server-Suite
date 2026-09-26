@@ -196,4 +196,6 @@ export interface ControlPlaneStore {
   listQueuedChatMessages(serverId: string, limit: number): Promise<ChatQueueMessage[]>;
   acknowledgeChatMessage(serverId: string, id: string, status: "delivered" | "rejected", detail: string): Promise<ChatQueueMessage | null>;
   queueChatMessage(message: NewChatQueueMessage): Promise<{ message: ChatQueueMessage; created: boolean }>;
+  /** Server-authenticated auction RPC. PostgreSQL is authoritative in production. */
+  auctionRequest(operation: string, payload: Record<string, unknown>): Promise<Record<string, unknown>>;
 }

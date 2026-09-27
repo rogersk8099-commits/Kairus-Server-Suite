@@ -85,7 +85,8 @@ const bridgeEventSchema = z.object({
 
 const guildPointsOperation = z.enum([
   "guild-summary","guild-top","guild-invites","guild-create","guild-action",
-  "points-summary","points-history","points-top","points-adjust"
+  "points-summary","points-history","points-top","points-adjust",
+  "guild-admin-search","guild-admin-detail","guild-admin-action"
 ]);
 const guildPointsRpcSchema = z.object({
   operation: guildPointsOperation,

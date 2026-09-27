@@ -465,6 +465,41 @@ export class PostgresStore implements ControlPlaneStore {
         await client.query("COMMIT");return {...await guildSummary(player),message:action==="guild-transfer-arm"?"Ownership transfer is armed. Confirm within 30 seconds.":"Guild updated."};
       }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
     }
+    if(operation==="guild-admin-search"){
+      const query=String(payload.query??"").trim().toLowerCase(),limit=Math.max(1,Math.min(Number(payload.limit??25),100));
+      const r=await this.pool.query(`SELECT g.id,g.name,g.tag,g.description,g.owner_minecraft_uuid,g.points,g.created_at,count(m.minecraft_uuid)::int members
+        FROM platform_guilds g LEFT JOIN platform_guild_members m ON m.guild_id=g.id
+        WHERE $1='' OR lower(g.name) LIKE '%'||$1||'%' OR lower(g.tag) LIKE '%'||$1||'%' OR g.id::text=$1
+        GROUP BY g.id ORDER BY g.points DESC,g.name ASC LIMIT $2`,[query,limit]);
+      return {guilds:r.rows.map(x=>({id:String(x.id),name:x.name,tag:x.tag,description:x.description,ownerMinecraftUuid:String(x.owner_minecraft_uuid),points:Number(x.points),members:Number(x.members),createdAt:timestamp(x.created_at)}))};
+    }
+    if(operation==="guild-admin-detail"){
+      const guildId=String(payload.guildId??"");if(!validUuid(guildId))throw new Error("guildId must be a UUID");
+      const g=await this.pool.query("SELECT * FROM platform_guilds WHERE id=$1",[guildId]);if(!g.rowCount)throw new Error("Guild not found.");
+      const members=await this.pool.query("SELECT minecraft_uuid,rank,joined_at FROM platform_guild_members WHERE guild_id=$1 ORDER BY CASE rank WHEN 'LEADER' THEN 1 WHEN 'OFFICER' THEN 2 WHEN 'MEMBER' THEN 3 ELSE 4 END,joined_at",[guildId]);
+      const audit=await this.pool.query("SELECT actor_minecraft_uuid,target_minecraft_uuid,action,reason,created_at FROM platform_guild_admin_audit WHERE guild_id=$1 ORDER BY created_at DESC LIMIT 25",[guildId]);
+      const x=g.rows[0];return {guild:{id:String(x.id),name:x.name,tag:x.tag,description:x.description,ownerMinecraftUuid:String(x.owner_minecraft_uuid),points:Number(x.points),members:members.rows.map(m=>({minecraftUuid:String(m.minecraft_uuid),rank:m.rank,joinedAt:timestamp(m.joined_at)})),audit:audit.rows.map(a=>({actorMinecraftUuid:String(a.actor_minecraft_uuid),targetMinecraftUuid:a.target_minecraft_uuid?String(a.target_minecraft_uuid):null,action:a.action,reason:a.reason,createdAt:timestamp(a.created_at)}))}};
+    }
+    if(operation==="guild-admin-action"){
+      const guildId=String(payload.guildId??""),action=String(payload.action??""),reason=String(payload.reason??"").trim().slice(0,256),targetUuid=payload.targetMinecraftUuid?String(payload.targetMinecraftUuid):null,value=String(payload.value??"").trim();
+      if(!validUuid(guildId))throw new Error("guildId must be a UUID");if(reason.length<3)throw new Error("An audit reason is required.");
+      const allowed=["remove-member","set-rank","transfer-owner","set-description","set-name","set-tag","disband"];
+      if(!allowed.includes(action))throw new Error("Unsupported guild staff action.");
+      const client=await this.pool.connect();try{await client.query("BEGIN");
+        const before=await client.query("SELECT * FROM platform_guilds WHERE id=$1 FOR UPDATE",[guildId]);if(!before.rowCount)throw new Error("Guild not found.");
+        if(["remove-member","set-rank","transfer-owner"].includes(action)){if(!targetUuid||!validUuid(targetUuid))throw new Error("A target Minecraft UUID is required.");const member=await client.query("SELECT rank FROM platform_guild_members WHERE guild_id=$1 AND minecraft_uuid=$2",[guildId,targetUuid]);if(!member.rowCount)throw new Error("Target is not a member of this guild.");
+          if(action==="remove-member"){if(member.rows[0].rank==="LEADER")throw new Error("Transfer ownership before removing the leader.");await client.query("DELETE FROM platform_guild_members WHERE guild_id=$1 AND minecraft_uuid=$2",[guildId,targetUuid]);}
+          if(action==="set-rank"){const rank=value.toUpperCase();if(!["OFFICER","MEMBER","RECRUIT"].includes(rank))throw new Error("Staff rank must be OFFICER, MEMBER or RECRUIT. Use transfer-owner for LEADER.");await client.query("UPDATE platform_guild_members SET rank=$3 WHERE guild_id=$1 AND minecraft_uuid=$2",[guildId,targetUuid,rank]);}
+          if(action==="transfer-owner"){await client.query("UPDATE platform_guild_members SET rank='OFFICER' WHERE guild_id=$1 AND rank='LEADER'",[guildId]);await client.query("UPDATE platform_guild_members SET rank='LEADER' WHERE guild_id=$1 AND minecraft_uuid=$2",[guildId,targetUuid]);await client.query("UPDATE platform_guilds SET owner_minecraft_uuid=$2,version=version+1 WHERE id=$1",[guildId,targetUuid]);}
+        } else if(action==="set-description"){await client.query("UPDATE platform_guilds SET description=$2,version=version+1 WHERE id=$1",[guildId,value.slice(0,512)]);}
+        else if(action==="set-name"){if(value.length<3||value.length>32)throw new Error("Guild name must be 3-32 characters.");await client.query("UPDATE platform_guilds SET name=$2,version=version+1 WHERE id=$1",[guildId,value]);}
+        else if(action==="set-tag"){const tag=value.toUpperCase();if(tag.length<2||tag.length>8)throw new Error("Guild tag must be 2-8 characters.");await client.query("UPDATE platform_guilds SET tag=$2,version=version+1 WHERE id=$1",[guildId,tag]);}
+        else if(action==="disband"){await client.query("DELETE FROM platform_guilds WHERE id=$1",[guildId]);}
+        const after=action==="disband"?null:(await client.query("SELECT * FROM platform_guilds WHERE id=$1",[guildId])).rows[0]??null;
+        await client.query(`INSERT INTO platform_guild_admin_audit(id,actor_minecraft_uuid,guild_id,target_minecraft_uuid,action,reason,before_state,after_state) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb)`,[randomUUID(),player,guildId,targetUuid,action,reason,JSON.stringify(before.rows[0]),JSON.stringify(after??{})]);
+        await client.query("COMMIT");return {message:`Guild staff action ${action} completed.`,guildId,removed:action==="disband"};
+      }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
+    }
     if(operation==="points-summary"){
       const r=await this.pool.query("SELECT currency_id,balance FROM platform_point_accounts WHERE minecraft_uuid=$1",[player]);const balances:Record<string,number>={};for(const x of r.rows)balances[String(x.currency_id)]=Number(x.balance);
       return {balances:currencies.map(currency=>({currency,balance:balances[currency]??0}))};

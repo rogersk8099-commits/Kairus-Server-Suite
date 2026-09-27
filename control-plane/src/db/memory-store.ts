@@ -209,7 +209,7 @@ export class MemoryStore implements ControlPlaneStore {
   }
 
   async guildPointsRequest(operation: string, _payload: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (["guild-summary","guild-top","guild-invites","points-summary","points-history","points-top"].includes(operation)) {
+    if (["guild-summary","guild-top","guild-invites","guild-admin-search","guild-admin-detail","points-summary","points-history","points-top"].includes(operation)) {
       return operation.startsWith("points") ? { balances: [], history: [], leaderboard: [], error: "Guilds and points require PostgreSQL storage." }
         : { inGuild: false, leaderboard: [], invites: [], creationCurrency: "KAIRU_POINTS", creationCost: 500, error: "Guilds and points require PostgreSQL storage." };
     }
